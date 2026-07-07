@@ -92,6 +92,8 @@ const A={
   season:(id,s)=>api(`/tv/${id}/season/${s}`),
   search:q=>api('/search/multi',{query:q}).then(d=>(d?.results||[]).filter(r=>r.media_type!=='person')),
   byGenre:g=>api('/discover/movie',{with_genres:g,sort_by:'popularity.desc'}).then(d=>d?.results||[]),
+  byGenreType:(g,type)=>api(`/discover/${type}`,{with_genres:g,sort_by:'popularity.desc','vote_count.gte':50}).then(d=>d?.results||[]),
+  animeTV:()=>api('/discover/tv',{with_genres:'16',with_original_language:'ja',sort_by:'popularity.desc'}).then(d=>d?.results||[]),
   similar:(id,t)=>api(`/${t}/${id}/similar`).then(d=>d?.results||[]),
   recommended:(id,t)=>api(`/${t}/${id}/recommendations`).then(d=>d?.results||[]),
   collection:id=>api(`/collection/${id}`).then(d=>d?.parts||[]),
@@ -535,7 +537,8 @@ function loadHeroTrailer(key){
   const iframe=document.getElementById('hero-trailer-iframe');
   const muteBtn=document.getElementById('hero-mute-btn');
   if(!wrap||!iframe)return;
-  iframe.src=`https://www.youtube.com/embed/${key}?autoplay=1&mute=1&loop=1&playlist=${key}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3`;
+  iframe.src=`https://www.youtube.com/embed/${key}?autoplay=1&mute=1&loop=1&playlist=${key}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`;
+  iframe.setAttribute('tabindex','-1');
   S.heroTrailerMuted=true;
   setTimeout(()=>{
     if(S.heroTrailerKey===key&&S.page==='home'){
@@ -560,7 +563,7 @@ function toggleHeroMute(){
   if(!iframe||!S.heroTrailerKey)return;
   S.heroTrailerMuted=!S.heroTrailerMuted;
   const key=S.heroTrailerKey,muted=S.heroTrailerMuted?1:0;
-  iframe.src=`https://www.youtube.com/embed/${key}?autoplay=1&mute=${muted}&loop=1&playlist=${key}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3`;
+  iframe.src=`https://www.youtube.com/embed/${key}?autoplay=1&mute=${muted}&loop=1&playlist=${key}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`;
   if(muteBtn){
     muteBtn.querySelector('.mute-off').style.display=S.heroTrailerMuted?'block':'none';
     muteBtn.querySelector('.mute-on').style.display=S.heroTrailerMuted?'none':'block';
@@ -649,6 +652,16 @@ async function loadHome(){
   fillRail(document.getElementById('rail-movies'),A.movies);
   fillRail(document.getElementById('rail-tv'),A.tv);
   fillRail(document.getElementById('rail-toprated'),A.topRated);
+  fillRail(document.getElementById('rail-new'),A.nowPlaying);
+  fillRail(document.getElementById('rail-toptv'),A.topTV);
+  fillRail(document.getElementById('rail-action'),()=>A.byGenreType('28|12','movie'));
+  fillRail(document.getElementById('rail-comedy'),()=>A.byGenreType('35','movie'));
+  fillRail(document.getElementById('rail-horror'),()=>A.byGenreType('27','movie'));
+  fillRail(document.getElementById('rail-scifi'),()=>A.byGenreType('878|14','movie'));
+  fillRail(document.getElementById('rail-crime'),()=>A.byGenreType('80|53','movie'));
+  fillRail(document.getElementById('rail-animation'),()=>A.byGenreType('16','movie'));
+  fillRail(document.getElementById('rail-anime'),A.animeTV);
+  fillRail(document.getElementById('rail-doc'),()=>A.byGenreType('99','movie'));
 }
 function refreshContRow(){
   const sec=document.getElementById('continue-sec'),rail=document.getElementById('rail-continue');

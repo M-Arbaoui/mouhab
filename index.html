@@ -13,8 +13,8 @@
   <meta name="twitter:card"             content="summary_large_image">
   <meta property="og:image"             content="https://watchy-dev.vercel.app/og-image.png">
   <meta property="og:image:secure_url"  content="https://watchy-dev.vercel.app/og-image.png">
-  <meta property="og:image:width"       content="1400">
-  <meta property="og:image:height"      content="738">
+  <meta property="og:image:width"       content="1200">
+  <meta property="og:image:height"      content="630">
   <meta property="og:image:type"        content="image/png">
   <meta property="og:image:alt"         content="Watchy. — Cinema without the noise.">
   <meta name="twitter:image"            content="https://watchy-dev.vercel.app/og-image.png">
@@ -186,9 +186,52 @@
     </div>
     <div id="rail-tv" class="rail"></div>
   </section>
-  <section class="section" style="padding-bottom:72px">
+  <section class="section">
     <div class="section-head"><h2 class="section-title">Top Rated</h2></div>
     <div id="rail-toprated" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head">
+      <h2 class="section-title">New Releases</h2>
+      <button class="section-all" data-goto="movies">See all →</button>
+    </div>
+    <div id="rail-new" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Top Rated Series</h2></div>
+    <div id="rail-toptv" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Action &amp; Adventure</h2></div>
+    <div id="rail-action" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Comedies</h2></div>
+    <div id="rail-comedy" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Horror</h2></div>
+    <div id="rail-horror" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Sci-Fi &amp; Fantasy</h2></div>
+    <div id="rail-scifi" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Crime &amp; Thrillers</h2></div>
+    <div id="rail-crime" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Animation</h2></div>
+    <div id="rail-animation" class="rail"></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2 class="section-title">Anime</h2></div>
+    <div id="rail-anime" class="rail"></div>
+  </section>
+  <section class="section" style="padding-bottom:72px">
+    <div class="section-head"><h2 class="section-title">Documentaries</h2></div>
+    <div id="rail-doc" class="rail"></div>
   </section>
   <footer class="site-footer">
     <span class="footer-brand">Watchy<span class="dot">.</span></span>
@@ -301,19 +344,21 @@
 
 <!-- TITLE PAGE -->
 <div id="page-title" class="page">
-  <div class="tp-backdrop-wrap">
-    <div class="tp-backdrop-lq" id="tp-backdrop-lq"></div>
-    <div class="tp-backdrop" id="tp-backdrop"></div>
-    <div class="tp-backdrop-grad"></div>
-    <div class="tp-backdrop-vignette"></div>
-  </div>
   <div class="tp-body">
     <button class="tp-back-btn" id="tp-back-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="m15 18-6-6 6-6"/></svg>
       Back
     </button>
 
-    <div class="tp-hero-row">
+    <div class="tp-hero-card">
+      <div class="tp-hero-card-bg">
+        <div class="tp-backdrop-lq" id="tp-backdrop-lq"></div>
+        <div class="tp-backdrop" id="tp-backdrop"></div>
+        <div class="tp-backdrop-grad"></div>
+        <div class="tp-backdrop-vignette"></div>
+      </div>
+
+      <div class="tp-hero-row">
       <!-- Poster + trailer column -->
       <div class="tp-poster-col">
         <div class="tp-poster-wrap">
@@ -369,7 +414,8 @@
           </button>
         </div>
       </div>
-    </div><!-- /tp-hero-row -->
+      </div><!-- /tp-hero-row -->
+    </div><!-- /tp-hero-card -->
 
     <!-- Cast -->
     <section class="tp-section">
