@@ -393,6 +393,8 @@ function makeCard(item,opts={}){
   const src=imgP(item.poster_path),fav=isFav(item.id);
   const pct=opts.showProgress?getProg(item.id,type):0;
   const score=item.vote_average?Math.round(item.vote_average*10):0;
+  const releaseDate=item.release_date||item.first_air_date;
+  const isNew=releaseDate&&!opts.hideNewBadge&&(Date.now()-new Date(releaseDate).getTime())<1000*60*60*24*21&&new Date(releaseDate).getTime()<=Date.now();
 
   const wrap=document.createElement('div');
   wrap.className='card';wrap.dataset.id=item.id;
@@ -425,6 +427,12 @@ function makeCard(item,opts={}){
     imgW.appendChild(rb);
   }
 
+  // New badge — recently released, bottom-right corner (only free spot)
+  if(isNew){
+    const nb=document.createElement('div');nb.className='card-new-badge';nb.textContent='NEW';
+    imgW.appendChild(nb);
+  }
+
   // Progress bar at bottom of image
   if(opts.showProgress&&pct>0){
     const pb=document.createElement('div');pb.className='card-prog-bar';
@@ -439,6 +447,11 @@ function makeCard(item,opts={}){
       <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M8 5v14l11-7z"/></svg>
     </button>`;
   imgW.appendChild(ov);
+  ov.querySelector('.card-play-icon').addEventListener('click',e=>{
+    e.stopPropagation();
+    if(type==='tv'){const last=getLastEp(item.id);openPlayer(item,'tv',last?.season||1,last?.episode||1);}
+    else openPlayer(item,'movie');
+  });
 
   // Persistent type pill (independent of hover so it stays visible on touch)
   if(type==='tv'){
@@ -481,7 +494,17 @@ const skels=(n=8)=>Array.from({length:n},()=>{
 });
 async function fillRail(el,fn,opts={}){
   el.innerHTML='';skels(8).forEach(s=>el.appendChild(s));
-  const items=await fn();el.innerHTML='';
+  let items=[];
+  try{items=await fn()||[];}catch(_){items=[];}
+  el.innerHTML='';
+  if(!items.length){
+    el.innerHTML=`<div class="rail-error">
+      <span>Couldn't load this row.</span>
+      <button class="rail-retry-btn">Retry</button>
+    </div>`;
+    el.querySelector('.rail-retry-btn')?.addEventListener('click',()=>fillRail(el,fn,opts));
+    return;
+  }
   let list=S.genre?items.filter(i=>i.genre_ids?.includes(parseInt(S.genre))):items;
   if(!list.length)list=items;
   // Quality floor: keep only titles with enough votes to be "known", unless that would gut the row
@@ -623,6 +646,20 @@ function setupGenres(){
     bar.appendChild(btn);
   });
 }
+async function loadBecauseYouWatched(seen){
+  const sec=document.getElementById('because-sec');
+  const candidate=S.hist[0]||S.favs[0];
+  if(!candidate){sec.style.display='none';return;}
+  const type=mtyp(candidate);
+  let items=await A.recommended(candidate.id,type);
+  if(!items.length)items=await A.similar(candidate.id,type);
+  items=items.filter(i=>!seen.has(i.id));
+  if(!items.length){sec.style.display='none';return;}
+  sec.style.display='';
+  document.getElementById('because-title').textContent=ttl(candidate);
+  await fillRail(document.getElementById('rail-because'),()=>Promise.resolve(items),{dedupe:seen});
+}
+
 async function loadHome(){
   const trending=await A.trending();
   if(trending.length)setupHero(trending);
@@ -631,6 +668,7 @@ async function loadHome(){
   // Sequential on purpose: each rail claims its titles before the next rail
   // runs, so the same "known" movie doesn't keep resurfacing in every genre
   // row below it. Rails above the fold still appear within a couple hundred ms.
+  await loadBecauseYouWatched(seen);
   await fillRail(document.getElementById('rail-trending'),A.trending,{ranked:true,minVotes:30,dedupe:seen});
   await fillRail(document.getElementById('rail-movies'),A.movies,{minVotes:80,dedupe:seen});
   await fillRail(document.getElementById('rail-tv'),A.tv,{minVotes:80,dedupe:seen});
@@ -808,9 +846,21 @@ async function openTitlePage(item){
   document.getElementById('tp-runtime').textContent=rt?fmtRuntime(rt):'';
   document.getElementById('tp-seasons').textContent=details.number_of_seasons?`${details.number_of_seasons} Season${details.number_of_seasons!==1?'s':''}` :'';
 
-  // Genres
+  // Genres — clickable, jumps into Discover filtered by that genre
   const gEl=document.getElementById('tp-genres');
-  (details.genres||[]).forEach(g=>{const pill=document.createElement('span');pill.className='tp-genre-pill';pill.textContent=g.name;gEl.appendChild(pill);});
+  (details.genres||[]).forEach(g=>{
+    const pill=document.createElement('button');
+    pill.className='tp-genre-pill';pill.textContent=g.name;pill.type='button';
+    pill.addEventListener('click',()=>{
+      S_discoverGenre=String(g.id);
+      goTo('discover');
+      document.querySelectorAll('.discover-genre-chip').forEach(b=>{
+        b.classList.toggle('active',b.dataset.g===String(g.id));
+      });
+      initDiscover();
+    });
+    gEl.appendChild(pill);
+  });
 
   renderImdbBlock(details);
   renderJustWatchBlock(details['watch/providers']);
@@ -1109,7 +1159,6 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
   setTimeout(()=>hideCinematicLoader(),400);
 }
 
-function loadVidSrc(id,type,season,ep){loadVidSrcWithServer(id,type,season,ep);}
 
 let _srcHintTimer=null;
 function loadVidSrcWithServer(id,type,season,ep){
@@ -1296,10 +1345,14 @@ function updateEpCounter(){
 function initKeyboard(){
   document.addEventListener('keydown',e=>{
     if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;
+    if(e.key==='/'&&!S.searchOpen){e.preventDefault();openSearch();return;}
     if(S.page==='player'){
       if(e.code==='KeyN'){e.preventDefault();nextEpisode();}
       if(e.code==='KeyP'){e.preventDefault();prevEpisode();}
-      if(e.code==='Escape')document.getElementById('player-ep-panel')?.classList.remove('open');
+      if(e.code==='Escape'){
+        document.getElementById('player-ep-panel')?.classList.remove('open');
+        closeSrcPanel();
+      }
     }
     if(S.page==='discover'){
       if(e.code==='ArrowRight')discoverNext();
