@@ -22,8 +22,7 @@ const GENRES=[
 const S={
   page:'home',lastPage:'home',
   scrollPositions:{},
-  heroItems:[],heroIdx:0,heroTimer:null,heroTrailerLoading:false,
-  heroTrailerKey:null,heroTrailerMuted:true,heroTrailerActive:false,
+  heroItems:[],heroIdx:0,heroTimer:null,
   favs:JSON.parse(localStorage.getItem('wt_favs')||'[]'),
   hist:JSON.parse(localStorage.getItem('wt_hist')||'[]'),
   prog:JSON.parse(localStorage.getItem('wt_prog')||'{}'),
@@ -92,8 +91,14 @@ const A={
   season:(id,s)=>api(`/tv/${id}/season/${s}`),
   search:q=>api('/search/multi',{query:q}).then(d=>(d?.results||[]).filter(r=>r.media_type!=='person')),
   byGenre:g=>api('/discover/movie',{with_genres:g,sort_by:'popularity.desc'}).then(d=>d?.results||[]),
-  byGenreType:(g,type)=>api(`/discover/${type}`,{with_genres:g,sort_by:'popularity.desc','vote_count.gte':50}).then(d=>d?.results||[]),
-  animeTV:()=>api('/discover/tv',{with_genres:'16',with_original_language:'ja',sort_by:'popularity.desc'}).then(d=>d?.results||[]),
+  byGenreType:(g,type)=>Promise.all([
+    api(`/discover/${type}`,{with_genres:g,sort_by:'popularity.desc','vote_count.gte':300,page:1}),
+    api(`/discover/${type}`,{with_genres:g,sort_by:'popularity.desc','vote_count.gte':300,page:2}),
+  ]).then(([a,b])=>[...(a?.results||[]),...(b?.results||[])]),
+  animeTV:()=>Promise.all([
+    api('/discover/tv',{with_genres:'16',with_original_language:'ja',sort_by:'popularity.desc','vote_count.gte':80,page:1}),
+    api('/discover/tv',{with_genres:'16',with_original_language:'ja',sort_by:'popularity.desc','vote_count.gte':80,page:2}),
+  ]).then(([a,b])=>[...(a?.results||[]),...(b?.results||[])]),
   similar:(id,t)=>api(`/${t}/${id}/similar`).then(d=>d?.results||[]),
   recommended:(id,t)=>api(`/${t}/${id}/recommendations`).then(d=>d?.results||[]),
   collection:id=>api(`/collection/${id}`).then(d=>d?.parts||[]),
@@ -202,7 +207,6 @@ function setServer(idx){
 /* ── Routing ── */
 function goTo(name,skipSave=false,restoreScroll=false){
   if(S.page==='player'&&name!=='player')stopPlayer();
-  if(name!=='home')stopHeroTrailer();
   clearToast();closeSearch();
   if(S.page&&S.page!=='player'&&S.page!=='title'){
     S.scrollPositions[S.page]=window.scrollY;
@@ -470,13 +474,33 @@ function makeCard(item,opts={}){
   });
   return wrap;
 }
-const skels=(n=8)=>Array.from({length:n},()=>{const d=document.createElement('div');d.className='card-sk';return d;});
+const skels=(n=8)=>Array.from({length:n},()=>{
+  const d=document.createElement('div');d.className='card-sk-wrap';
+  d.innerHTML=`<div class="card-sk"></div><div class="card-sk-line card-sk-line-a"></div><div class="card-sk-line card-sk-line-b"></div>`;
+  return d;
+});
 async function fillRail(el,fn,opts={}){
   el.innerHTML='';skels(8).forEach(s=>el.appendChild(s));
   const items=await fn();el.innerHTML='';
-  const filtered=S.genre?items.filter(i=>i.genre_ids?.includes(parseInt(S.genre))):items;
-  const list=filtered.length?filtered:items;
-  list.forEach((item,i)=>el.appendChild(makeCard(item,{...opts,rank:opts.ranked?i+1:undefined})));
+  let list=S.genre?items.filter(i=>i.genre_ids?.includes(parseInt(S.genre))):items;
+  if(!list.length)list=items;
+  // Quality floor: keep only titles with enough votes to be "known", unless that would gut the row
+  if(opts.minVotes){
+    const q=list.filter(i=>(i.vote_count||0)>=opts.minVotes);
+    if(q.length>=6)list=q;
+  }
+  // Cross-rail de-duplication so the same title doesn't repeat across every genre row on the page
+  if(opts.dedupe){
+    const fresh=list.filter(i=>!opts.dedupe.has(i.id));
+    if(fresh.length>=6)list=fresh;
+    list.forEach(i=>opts.dedupe.add(i.id));
+  }
+  list.forEach((item,i)=>{
+    const card=makeCard(item,{...opts,rank:opts.ranked?i+1:undefined});
+    card.style.animationDelay=`${Math.min(i,10)*35}ms`;
+    card.classList.add('card-enter');
+    el.appendChild(card);
+  });
 }
 const pagedfetch={
   movies:page=>api('/movie/popular',{page}).then(d=>d?.results||[]),
@@ -527,49 +551,6 @@ function extractAmbientColor(imgUrl){
   });
 }
 
-/* ══════════════════════════════════════════
-   HERO TRAILER AUTOPLAY
-   ══════════════════════════════════════════ */
-let _heroTrailerTimer=null;
-function loadHeroTrailer(key){
-  S.heroTrailerKey=key;
-  const wrap=document.getElementById('hero-trailer-wrap');
-  const iframe=document.getElementById('hero-trailer-iframe');
-  const muteBtn=document.getElementById('hero-mute-btn');
-  if(!wrap||!iframe)return;
-  iframe.src=`https://www.youtube.com/embed/${key}?autoplay=1&mute=1&loop=1&playlist=${key}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`;
-  iframe.setAttribute('tabindex','-1');
-  S.heroTrailerMuted=true;
-  setTimeout(()=>{
-    if(S.heroTrailerKey===key&&S.page==='home'){
-      wrap.classList.add('active');
-      if(muteBtn)muteBtn.style.display='flex';
-      S.heroTrailerActive=true;
-    }
-  },1500);
-}
-function stopHeroTrailer(){
-  S.heroTrailerActive=false;S.heroTrailerKey=null;
-  const wrap=document.getElementById('hero-trailer-wrap');
-  const iframe=document.getElementById('hero-trailer-iframe');
-  const muteBtn=document.getElementById('hero-mute-btn');
-  if(wrap)wrap.classList.remove('active');
-  if(iframe)iframe.src='';
-  if(muteBtn)muteBtn.style.display='none';
-}
-function toggleHeroMute(){
-  const iframe=document.getElementById('hero-trailer-iframe');
-  const muteBtn=document.getElementById('hero-mute-btn');
-  if(!iframe||!S.heroTrailerKey)return;
-  S.heroTrailerMuted=!S.heroTrailerMuted;
-  const key=S.heroTrailerKey,muted=S.heroTrailerMuted?1:0;
-  iframe.src=`https://www.youtube.com/embed/${key}?autoplay=1&mute=${muted}&loop=1&playlist=${key}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0`;
-  if(muteBtn){
-    muteBtn.querySelector('.mute-off').style.display=S.heroTrailerMuted?'block':'none';
-    muteBtn.querySelector('.mute-on').style.display=S.heroTrailerMuted?'none':'block';
-  }
-}
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopHeroTrailer();});
 
 let _heroBgToggle=false;
 async function renderHero(item){
@@ -598,17 +579,16 @@ async function renderHero(item){
       if(ambient)ambient.style.background=`radial-gradient(ellipse 80% 60% at 20% 80%, rgba(${rgb},.28) 0%, transparent 70%)`;
     });
   }
-  stopHeroTrailer();clearTimeout(_heroTrailerTimer);S.heroTrailerLoading=false;
-  _heroTrailerTimer=setTimeout(async()=>{
-    if(S.heroItems[S.heroIdx]?.id!==item.id||S.page!=='home')return;
-    S.heroTrailerLoading=true;
-    const vids=await A.videos(item.id,mtyp(item));
-    S.heroTrailerLoading=false;
-    if(S.heroItems[S.heroIdx]?.id===item.id&&S.page==='home'){
-      const tr=vids?.find(v=>v.type==='Trailer'&&v.site==='YouTube')||vids?.find(v=>v.site==='YouTube');
-      if(tr)loadHeroTrailer(tr.key);
-    }
-  },4000);
+
+  // Watch Now → Resume, mirroring the title page's logic
+  const type=mtyp(item);
+  const prog=type==='tv'?(getLastEp(item.id)?getProg(item.id,'tv',getLastEp(item.id).season,getLastEp(item.id).episode):0):getProg(item.id,'movie');
+  const playBtn=document.getElementById('hero-play-btn');
+  if(playBtn){
+    playBtn.innerHTML=prog>5
+      ?`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume (${prog}%)`
+      :`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Watch Now`;
+  }
 }
 function setupHero(items){
   S.heroItems=items.slice(0,7);S.heroIdx=0;renderHero(S.heroItems[0]);
@@ -623,7 +603,6 @@ function setupHero(items){
 function startHeroTimer(){
   clearInterval(S.heroTimer);
   S.heroTimer=setInterval(()=>{
-    if(S.heroTrailerActive)return;
     S.heroIdx=(S.heroIdx+1)%S.heroItems.length;
     renderHero(S.heroItems[S.heroIdx]);
   },12000);
@@ -648,20 +627,24 @@ async function loadHome(){
   const trending=await A.trending();
   if(trending.length)setupHero(trending);
   refreshContRow();
-  fillRail(document.getElementById('rail-trending'),A.trending,{ranked:true});
-  fillRail(document.getElementById('rail-movies'),A.movies);
-  fillRail(document.getElementById('rail-tv'),A.tv);
-  fillRail(document.getElementById('rail-toprated'),A.topRated);
-  fillRail(document.getElementById('rail-new'),A.nowPlaying);
-  fillRail(document.getElementById('rail-toptv'),A.topTV);
-  fillRail(document.getElementById('rail-action'),()=>A.byGenreType('28|12','movie'));
-  fillRail(document.getElementById('rail-comedy'),()=>A.byGenreType('35','movie'));
-  fillRail(document.getElementById('rail-horror'),()=>A.byGenreType('27','movie'));
-  fillRail(document.getElementById('rail-scifi'),()=>A.byGenreType('878|14','movie'));
-  fillRail(document.getElementById('rail-crime'),()=>A.byGenreType('80|53','movie'));
-  fillRail(document.getElementById('rail-animation'),()=>A.byGenreType('16','movie'));
-  fillRail(document.getElementById('rail-anime'),A.animeTV);
-  fillRail(document.getElementById('rail-doc'),()=>A.byGenreType('99','movie'));
+  const seen=new Set();
+  // Sequential on purpose: each rail claims its titles before the next rail
+  // runs, so the same "known" movie doesn't keep resurfacing in every genre
+  // row below it. Rails above the fold still appear within a couple hundred ms.
+  await fillRail(document.getElementById('rail-trending'),A.trending,{ranked:true,minVotes:30,dedupe:seen});
+  await fillRail(document.getElementById('rail-movies'),A.movies,{minVotes:80,dedupe:seen});
+  await fillRail(document.getElementById('rail-tv'),A.tv,{minVotes:80,dedupe:seen});
+  await fillRail(document.getElementById('rail-toprated'),A.topRated,{minVotes:50,dedupe:seen});
+  await fillRail(document.getElementById('rail-new'),A.nowPlaying,{dedupe:seen});
+  await fillRail(document.getElementById('rail-toptv'),A.topTV,{minVotes:50,dedupe:seen});
+  await fillRail(document.getElementById('rail-action'),()=>A.byGenreType('28|12','movie'),{dedupe:seen});
+  await fillRail(document.getElementById('rail-comedy'),()=>A.byGenreType('35','movie'),{dedupe:seen});
+  await fillRail(document.getElementById('rail-horror'),()=>A.byGenreType('27','movie'),{dedupe:seen});
+  await fillRail(document.getElementById('rail-scifi'),()=>A.byGenreType('878|14','movie'),{dedupe:seen});
+  await fillRail(document.getElementById('rail-crime'),()=>A.byGenreType('80|53','movie'),{dedupe:seen});
+  await fillRail(document.getElementById('rail-animation'),()=>A.byGenreType('16','movie'),{dedupe:seen});
+  await fillRail(document.getElementById('rail-anime'),A.animeTV,{dedupe:seen});
+  await fillRail(document.getElementById('rail-doc'),()=>A.byGenreType('99','movie'),{dedupe:seen});
 }
 function refreshContRow(){
   const sec=document.getElementById('continue-sec'),rail=document.getElementById('rail-continue');
@@ -1503,8 +1486,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('nav-logo').addEventListener('click',()=>goTo('home'));
   document.querySelectorAll('[data-goto]').forEach(el=>el.addEventListener('click',()=>navTo(el.dataset.goto)));
   // Hero
-  document.getElementById('hero-mute-btn')?.addEventListener('click',toggleHeroMute);
-  document.getElementById('hero-play-btn').addEventListener('click',()=>{const item=S.heroItems[S.heroIdx];if(item)openPlayer(item,mtyp(item));});
+  document.getElementById('hero-play-btn').addEventListener('click',()=>{
+    const item=S.heroItems[S.heroIdx];if(!item)return;
+    const type=mtyp(item);
+    if(type==='tv'){const last=getLastEp(item.id);openPlayer(item,'tv',last?.season||1,last?.episode||1);}
+    else openPlayer(item,'movie');
+  });
   document.getElementById('hero-info-btn').addEventListener('click',()=>{const item=S.heroItems[S.heroIdx];if(item)openTitlePage(item);});
   // Continue watching
   document.getElementById('continue-clear-btn')?.addEventListener('click',()=>{S.hist=[];S.prog={};save();refreshContRow();showToast('Cleared');});
