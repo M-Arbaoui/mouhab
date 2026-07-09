@@ -398,6 +398,7 @@ function makeCard(item,opts={}){
 
   const wrap=document.createElement('div');
   wrap.className='card';wrap.dataset.id=item.id;
+  wrap.tabIndex=0;wrap.setAttribute('role','button');wrap.setAttribute('aria-label',`${t}${y?`, ${y}`:''}`);
 
   const imgW=document.createElement('div');imgW.className='card-img-w';
   if(src){
@@ -476,6 +477,10 @@ function makeCard(item,opts={}){
   wrap.appendChild(info);
 
   wrap.addEventListener('click',e=>{if(e.target.closest('.card-fav'))return;closeSearch();openTitlePage(item);});
+  wrap.addEventListener('keydown',e=>{
+    if(e.target.closest('.card-fav')||e.target.closest('.card-play-icon'))return;
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();closeSearch();openTitlePage(item);}
+  });
   favBtn.addEventListener('click',e=>{
     e.stopPropagation();
     const now=toggleFav(item);
@@ -884,10 +889,11 @@ async function openTitlePage(item){
   const castRail=document.getElementById('tp-cast-rail');castRail.innerHTML='';
   cast.forEach(person=>{
     const card=document.createElement('div');card.className='cast-card';
+    card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',`${person.name}${person.character?`, as ${person.character}`:''}`);
     const imgW=document.createElement('div');imgW.className='cast-img-w';
     if(person.profile_path){
       const img=document.createElement('img');
-      img.alt=person.name;img.loading='eager';
+      img.alt=person.name;img.loading='lazy';
       img.onerror=()=>{imgW.innerHTML=castPH();};
       img.src=`${TMDB_IMG}/w185${person.profile_path}`;
       imgW.appendChild(img);
@@ -896,6 +902,7 @@ async function openTitlePage(item){
     const role=document.createElement('div');role.className='cast-role';role.textContent=person.character||'';
     card.appendChild(imgW);card.appendChild(name);card.appendChild(role);
     card.addEventListener('click',()=>openPersonPage(person.id));
+    card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPersonPage(person.id);}});
     castRail.appendChild(card);
   });
 

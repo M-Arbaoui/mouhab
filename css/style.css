@@ -44,6 +44,9 @@ button,input,select,textarea{
 }
 input,textarea{resize:none}
 a{color:inherit;text-decoration:none}
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid var(--gold);outline-offset:2px;
+}
 img{display:block;max-width:100%}
 select{appearance:none;-webkit-appearance:none}
 ::-webkit-scrollbar{width:4px;height:4px}
@@ -427,6 +430,7 @@ select{appearance:none;-webkit-appearance:none}
 .rail .card{max-width:160px}
 @media(hover:hover){.card:hover{transform:scale(1.035)}}
 .card:active{transform:scale(.97)}
+.card:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:var(--r-lg)}
 .card-img-w{
   position:relative;border-radius:var(--r-lg);overflow:hidden;
   background:var(--card);
@@ -516,6 +520,7 @@ select{appearance:none;-webkit-appearance:none}
   display:flex;align-items:center;justify-content:center;
 }
 @media(hover:hover){.card:hover .card-ov{opacity:1}}
+.card:focus-within .card-ov{opacity:1}
 @media(hover:none){.card-ov{display:none}}
 
 .card-play-icon{
@@ -527,6 +532,7 @@ select{appearance:none;-webkit-appearance:none}
   flex-shrink:0;box-shadow:0 4px 16px rgba(0,0,0,.4);
 }
 @media(hover:hover){.card:hover .card-play-icon{opacity:1;transform:scale(1)}}
+.card:focus-within .card-play-icon{opacity:1;transform:scale(1)}
 @media(hover:none){.card-play-icon{display:none}}
 .card-play-icon svg{margin-left:2px}
 .card-type-pill{
@@ -922,6 +928,7 @@ select{appearance:none;-webkit-appearance:none}
   transition:transform .22s var(--ease);
 }
 .cast-card:hover{transform:translateY(-3px)}
+.cast-card:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:12px}
 .cast-img-w{
   width:100px;height:100px;border-radius:50%;overflow:hidden;
   background:var(--card);margin-bottom:8px;
