@@ -100,7 +100,7 @@ const A={
   topRated:()=>api('/movie/top_rated').then(d=>d?.results||[]),
   nowPlaying:()=>api('/movie/now_playing').then(d=>d?.results||[]),
   topTV:()=>api('/tv/top_rated').then(d=>d?.results||[]),
-  details:(id,t)=>api(`/${t}/${id}`,{append_to_response:'credits,belongs_to_collection,videos,watch/providers,external_ids'}),
+  details:(id,t)=>api(`/${t}/${id}`,{append_to_response:'credits,belongs_to_collection,watch/providers,external_ids'}),
   season:(id,s)=>api(`/tv/${id}/season/${s}`),
   search:q=>api('/search/multi',{query:q}).then(d=>(d?.results||[]).filter(r=>r.media_type!=='person')),
   byGenre:g=>api('/discover/movie',{with_genres:g,sort_by:'popularity.desc'}).then(d=>d?.results||[]),
@@ -116,7 +116,6 @@ const A={
   recommended:(id,t)=>api(`/${t}/${id}/recommendations`).then(d=>d?.results||[]),
   collection:id=>api(`/collection/${id}`).then(d=>d?.parts||[]),
   person:(id)=>api(`/person/${id}`,{append_to_response:'combined_credits'}),
-  videos:(id,t)=>api(`/${t}/${id}/videos`).then(d=>d?.results||[]),
 };
 
 const ttl=i=>i.title||i.name||'Untitled';
@@ -843,13 +842,10 @@ async function openTitlePage(item){
   document.getElementById('tp-type-badge').textContent=type==='tv'?'Series':'Movie';
 
   // Reset
-  ['tp-genres','tp-trailer-wrap','tp-cast-rail','tp-ep-list','tp-collection-rail','tp-similar-rail','tp-imdb-block','tp-justwatch-block'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
+  ['tp-genres','tp-cast-rail','tp-ep-list','tp-collection-rail','tp-similar-rail','tp-imdb-block','tp-justwatch-block'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
   ['tp-eps-section','tp-collection-sec','tp-similar-sec'].forEach(id=>document.getElementById(id).style.display='none');
   ['tp-runtime','tp-seasons'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='';});
   ['tp-imdb-block','tp-justwatch-block'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-  const tew=document.getElementById('tp-trailer-embed-wrap');
-  const tei=document.getElementById('tp-trailer-embed');
-  if(tew)tew.style.display='none';if(tei)tei.src='';
 
   // Skeleton cast
   document.getElementById('tp-cast-rail').innerHTML=Array.from({length:6},()=>`<div class="cast-skel"><div class="cast-skel-face"></div><div class="cast-skel-line"></div></div>`).join('');
@@ -903,20 +899,6 @@ async function openTitlePage(item){
 
   renderImdbBlock(details);
   renderJustWatchBlock(details['watch/providers']);
-
-  // Trailer
-  const videos=details.videos?.results||[];
-  const trailer=videos.find(v=>v.type==='Trailer'&&v.site==='YouTube')||videos.find(v=>v.site==='YouTube');
-  if(trailer){
-    const trailerWrap=document.getElementById('tp-trailer-wrap');
-    if(trailerWrap){
-      const btn=document.createElement('button');btn.className='tp-trailer-btn';
-      btn.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg> Trailer`;
-      btn.addEventListener('click',()=>openTrailer(trailer.key));
-      trailerWrap.appendChild(btn);
-    }
-    if(tew&&tei){tei.src=`https://www.youtube.com/embed/${trailer.key}?rel=0&modestbranding=1`;tew.style.display='block';}
-  }
 
   // Cast
   const cast=(details.credits?.cast||[]).slice(0,14);
@@ -1066,16 +1048,6 @@ function buildTitlePageSeasons(item,details){
 
   seasonSel.addEventListener('change',()=>loadSeasonEps(parseInt(seasonSel.value)));
   loadSeasonEps(1);
-}
-
-/* ── Trailer modal ── */
-function openTrailer(key){
-  document.getElementById('trailer-frame').src=`https://www.youtube.com/embed/${key}?autoplay=1&rel=0`;
-  document.getElementById('trailer-modal').classList.add('open');
-}
-function closeTrailer(){
-  document.getElementById('trailer-frame').src='';
-  document.getElementById('trailer-modal').classList.remove('open');
 }
 
 /* ── Person page ── */
@@ -1674,8 +1646,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Person
   document.getElementById('person-back-btn')?.addEventListener('click',()=>{if(S.titleItem)openTitlePage(S.titleItem);else goTo(S.lastPage||'home',false,true);});
   // Trailer
-  document.getElementById('trailer-close')?.addEventListener('click',closeTrailer);
-  document.getElementById('trailer-backdrop')?.addEventListener('click',closeTrailer);
   // Discover
   document.getElementById('discover-next')?.addEventListener('click',discoverNext);
   document.getElementById('discover-prev')?.addEventListener('click',discoverPrev);

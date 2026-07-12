@@ -866,16 +866,6 @@ select{appearance:none;-webkit-appearance:none}
   width:100%;height:100%;display:flex;align-items:center;justify-content:center;
   color:var(--text3);background:var(--card);
 }
-.tp-trailer-embed-wrap{
-  border-radius:var(--r);overflow:hidden;background:#000;
-  border:1px solid rgba(255,255,255,.07);
-}
-.tp-trailer-embed-label{
-  display:flex;align-items:center;gap:6px;padding:7px 12px;
-  background:rgba(9,9,11,.8);font-size:10px;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--text3);
-}
-.tp-trailer-embed{width:100%;aspect-ratio:16/9;display:block;border:none}
 
 /* Info col */
 .tp-info-col{display:flex;flex-direction:column;padding-top:4px}
@@ -979,15 +969,6 @@ select{appearance:none;-webkit-appearance:none}
   transition:border-color .18s,background .18s;
 }
 .btn-ghost:hover{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.1)}
-.tp-trailer-btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:9px 16px;border-radius:var(--r);
-  border:1px solid var(--border);color:var(--text3);
-  font-size:12px;
-  transition:border-color .18s,color .18s,background .18s;
-}
-.tp-trailer-btn:hover{border-color:var(--border2);color:var(--text2);background:rgba(255,255,255,.04)}
-
 /* ════════════════════════════════
    SCORE PILLS
 ════════════════════════════════ */
@@ -1121,28 +1102,6 @@ select{appearance:none;-webkit-appearance:none}
 /* ════════════════════════════════
    TRAILER MODAL
 ════════════════════════════════ */
-.trailer-modal{
-  position:fixed;inset:0;z-index:800;
-  display:none;align-items:center;justify-content:center;
-}
-.trailer-modal.open{display:flex}
-.trailer-backdrop{position:absolute;inset:0;background:rgba(9,9,11,.92);backdrop-filter:blur(20px)}
-.trailer-frame-wrap{
-  position:relative;z-index:1;
-  width:min(900px,calc(100vw - 32px));
-  border-radius:var(--r-lg);overflow:hidden;
-  box-shadow:var(--shadow-lg);
-}
-.trailer-close{
-  position:absolute;top:-40px;right:0;z-index:2;
-  display:flex;align-items:center;gap:6px;padding:6px 14px;
-  border-radius:8px;background:rgba(255,255,255,.08);
-  color:var(--text2);font-size:13px;border:1px solid var(--border2);
-  transition:background .18s,color .18s;
-}
-.trailer-close:hover{background:rgba(255,255,255,.14);color:var(--text)}
-.trailer-frame{width:100%;aspect-ratio:16/9;display:block;border:none}
-
 /* ════════════════════════════════
    PLAYER
 ════════════════════════════════ */
@@ -1452,7 +1411,6 @@ select{appearance:none;-webkit-appearance:none}
   .tp-hero-row{grid-template-columns:1fr;gap:20px;padding:24px 20px}
   .tp-poster-col{flex-direction:row;align-items:flex-start;gap:14px}
   .tp-poster-wrap{width:110px;flex-shrink:0}
-  .tp-trailer-embed-wrap{flex:1}
   .tp-info-col .tp-title{font-size:22px}
   .tp-info-col .tp-overview{font-size:13px}
   .tp-section{padding:0 16px}
@@ -1489,7 +1447,6 @@ select{appearance:none;-webkit-appearance:none}
   #hero-runtime-sep,#hero-runtime{display:none}
   .tp-poster-col{flex-direction:column;align-items:center}
   .tp-poster-wrap{width:140px;flex-shrink:0}
-  .tp-trailer-embed-wrap{width:100%}
   .ep-still,.ep-still-ph{width:86px;height:48px}
   .discover-title{font-size:22px}
   .discover-overview{font-size:13px;-webkit-line-clamp:2}
