@@ -17,6 +17,19 @@ const GENRES=[
   {label:'Romance',id:'10749'},{label:'Animation',id:'16'},
   {label:'Documentary',id:'99'},{label:'Crime',id:'80'},
 ];
+// Home page genre chips jump straight to the matching genre rail further down
+// the page (instead of quietly re-filtering an unrelated rail up top).
+const HOME_GENRE_NAV=[
+  {label:'All',target:null},
+  {label:'Action & Adventure',target:'section-action'},
+  {label:'Comedy',target:'section-comedy'},
+  {label:'Horror',target:'section-horror'},
+  {label:'Sci-Fi & Fantasy',target:'section-scifi'},
+  {label:'Crime & Thrillers',target:'section-crime'},
+  {label:'Animation',target:'section-animation'},
+  {label:'Anime',target:'section-anime'},
+  {label:'Documentary',target:'section-doc'},
+];
 
 /* ── State ── */
 const S={
@@ -26,7 +39,7 @@ const S={
   favs:JSON.parse(localStorage.getItem('wt_favs')||'[]'),
   hist:JSON.parse(localStorage.getItem('wt_hist')||'[]'),
   prog:JSON.parse(localStorage.getItem('wt_prog')||'{}'),
-  genre:null,moviesLoaded:false,seriesLoaded:false,
+  moviesLoaded:false,seriesLoaded:false,
   moviesPage:1,seriesPage:1,moviesLoading:false,seriesLoading:false,
   moviesDone:false,seriesDone:false,
   playerItem:null,playerType:null,playerSeason:1,playerEp:1,
@@ -102,8 +115,6 @@ const A={
   similar:(id,t)=>api(`/${t}/${id}/similar`).then(d=>d?.results||[]),
   recommended:(id,t)=>api(`/${t}/${id}/recommendations`).then(d=>d?.results||[]),
   collection:id=>api(`/collection/${id}`).then(d=>d?.parts||[]),
-  discoverM:(page)=>api('/discover/movie',{sort_by:'vote_average.desc','vote_count.gte':'500',page}).then(d=>d?.results||[]),
-  discoverTV:(page)=>api('/discover/tv',{sort_by:'vote_average.desc','vote_count.gte':'200',page}).then(d=>d?.results||[]),
   person:(id)=>api(`/person/${id}`,{append_to_response:'combined_credits'}),
   videos:(id,t)=>api(`/${t}/${id}/videos`).then(d=>d?.results||[]),
 };
@@ -370,7 +381,7 @@ function handleSearchInput(q){
     if(S.searchFilter==='tv')filtered=results.filter(r=>mtyp(r)==='tv');
     if(!filtered.length){
       const safeQ=q.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-      grid.innerHTML=emptyHTML('No matches.',`We couldn't find anything for "${safeQ}". Try a different title or spelling.`);return;
+      grid.innerHTML=emptyHTML('No matches.',`We couldn't find anything for "${safeQ}". Try a different title or spelling.`,EMPTY_ICON_SEARCH);return;
     }
     if(countEl)countEl.textContent=`${filtered.length} result${filtered.length!==1?'s':''}`;
     addSearchHist(q);
@@ -441,18 +452,25 @@ function makeCard(item,opts={}){
     imgW.appendChild(pb);
   }
 
-  // Hover overlay — dark scrim + centered play button (no trailer, no network calls)
+  // Hover overlay — dark scrim always; centered play button only where a
+  // one-click "jump straight to playing" shortcut actually makes sense
+  // (Continue Watching). Everywhere else, hovering just previews the card —
+  // clicking takes you to the title page to see what it actually is first.
   const ov=document.createElement('div');ov.className='card-ov';
-  ov.innerHTML=`
-    <button class="card-play-icon" aria-label="Watch ${t}">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M8 5v14l11-7z"/></svg>
-    </button>`;
-  imgW.appendChild(ov);
-  ov.querySelector('.card-play-icon').addEventListener('click',e=>{
-    e.stopPropagation();
-    if(type==='tv'){const last=getLastEp(item.id);openPlayer(item,'tv',last?.season||1,last?.episode||1);}
-    else openPlayer(item,'movie');
-  });
+  if(opts.showPlayIcon){
+    ov.innerHTML=`
+      <button class="card-play-icon" aria-label="Watch ${t}">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M8 5v14l11-7z"/></svg>
+      </button>`;
+    imgW.appendChild(ov);
+    ov.querySelector('.card-play-icon').addEventListener('click',e=>{
+      e.stopPropagation();
+      if(type==='tv'){const last=getLastEp(item.id);openPlayer(item,'tv',last?.season||1,last?.episode||1);}
+      else openPlayer(item,'movie');
+    });
+  }else{
+    imgW.appendChild(ov);
+  }
 
   // Persistent type pill (independent of hover so it stays visible on touch)
   if(type==='tv'){
@@ -469,11 +487,10 @@ function makeCard(item,opts={}){
 
   wrap.appendChild(imgW);
 
-  const gl=genreLabel(item.genre_ids);
   const info=document.createElement('div');info.className='card-info';
   info.innerHTML=`
     <div class="card-title">${t}</div>
-    <div class="card-meta">${y}${gl?`<span class="cdot">·</span><span class="card-genre">${gl}</span>`:''}</div>`;
+    <div class="card-meta">${y}</div>`;
   wrap.appendChild(info);
 
   wrap.addEventListener('click',e=>{if(e.target.closest('.card-fav'))return;closeSearch();openTitlePage(item);});
@@ -487,8 +504,11 @@ function makeCard(item,opts={}){
     favBtn.classList.toggle('active',now);
     favBtn.setAttribute('aria-label',now?'Remove from My List':'Add to My List');
     favBtn.querySelector('svg').setAttribute('fill',now?'currentColor':'none');
-    // Micro-interaction: scale pulse
-    favBtn.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:300,easing:'ease'});
+    // Micro-interaction: flip
+    favBtn.animate(
+      [{transform:'rotateY(0)'},{transform:'rotateY(180deg)'},{transform:'rotateY(360deg)'}],
+      {duration:420,easing:'cubic-bezier(.34,1.56,.64,1)'}
+    );
   });
   return wrap;
 }
@@ -510,8 +530,7 @@ async function fillRail(el,fn,opts={}){
     el.querySelector('.rail-retry-btn')?.addEventListener('click',()=>fillRail(el,fn,opts));
     return;
   }
-  let list=S.genre?items.filter(i=>i.genre_ids?.includes(parseInt(S.genre))):items;
-  if(!list.length)list=items;
+  let list=items;
   // Quality floor: keep only titles with enough votes to be "known", unless that would gut the row
   if(opts.minVotes){
     const q=list.filter(i=>(i.vote_count||0)>=opts.minVotes);
@@ -527,6 +546,7 @@ async function fillRail(el,fn,opts={}){
     const card=makeCard(item,{...opts,rank:opts.ranked?i+1:undefined});
     card.style.animationDelay=`${Math.min(i,10)*35}ms`;
     card.classList.add('card-enter');
+    card.addEventListener('animationend',()=>card.classList.remove('card-enter'),{once:true});
     el.appendChild(card);
   });
 }
@@ -541,7 +561,9 @@ function initInfiniteScroll(sentinelId,onLoad){
   const obs=new IntersectionObserver(entries=>{if(entries[0].isIntersecting)onLoad();},{rootMargin:'200px'});
   obs.observe(sentinel);return obs;
 }
-const emptyHTML=(h,p)=>`<div class="empty"><div class="empty-icon">◻</div><div class="empty-h">${h}</div><div class="empty-p">${p}</div></div>`;
+const emptyHTML=(h,p,icon)=>`<div class="empty"><div class="empty-icon">${icon||'<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 8 8 5 8-5"/></svg>'}</div><div class="empty-h">${h}</div><div class="empty-p">${p}</div></div>`;
+const EMPTY_ICON_SEARCH='<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>';
+const EMPTY_ICON_LIST='<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M19 21 12 16l-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>';
 
 function preloadImage(url){
   return new Promise(resolve=>{
@@ -638,15 +660,12 @@ function startHeroTimer(){
 function setupGenres(){
   const bar=document.getElementById('mood-bar');if(!bar)return;
   bar.innerHTML='<span class="mood-label">Genre</span>';
-  GENRES.forEach(g=>{
+  HOME_GENRE_NAV.forEach(g=>{
     const btn=document.createElement('button');
-    btn.className=`mood-chip${!g.id?' active':''}`;btn.textContent=g.label;
-    btn.addEventListener('click',async()=>{
-      document.querySelectorAll('.mood-chip').forEach(c=>c.classList.remove('active'));
-      btn.classList.add('active');S.genre=g.id;
-      const rail=document.getElementById('rail-trending');
-      if(g.id)fillRail(rail,()=>A.byGenre(g.id));
-      else fillRail(rail,A.trending,{ranked:true});
+    btn.className='mood-chip';btn.textContent=g.label;
+    btn.addEventListener('click',()=>{
+      if(g.target)document.getElementById(g.target)?.scrollIntoView({behavior:'smooth',block:'start'});
+      else window.scrollTo({top:0,behavior:'smooth'});
     });
     bar.appendChild(btn);
   });
@@ -670,9 +689,9 @@ async function loadHome(){
   if(trending.length)setupHero(trending);
   refreshContRow();
   const seen=new Set();
-  // Sequential on purpose: each rail claims its titles before the next rail
-  // runs, so the same "known" movie doesn't keep resurfacing in every genre
-  // row below it. Rails above the fold still appear within a couple hundred ms.
+  // Broad rails stay sequential — they draw from overlapping pools (trending,
+  // popular, and top-rated all surface similar well-known titles), so claim
+  // order matters here for de-duplication to behave predictably.
   await loadBecauseYouWatched(seen);
   await fillRail(document.getElementById('rail-trending'),A.trending,{ranked:true,minVotes:30,dedupe:seen});
   await fillRail(document.getElementById('rail-movies'),A.movies,{minVotes:80,dedupe:seen});
@@ -680,14 +699,21 @@ async function loadHome(){
   await fillRail(document.getElementById('rail-toprated'),A.topRated,{minVotes:50,dedupe:seen});
   await fillRail(document.getElementById('rail-new'),A.nowPlaying,{dedupe:seen});
   await fillRail(document.getElementById('rail-toptv'),A.topTV,{minVotes:50,dedupe:seen});
-  await fillRail(document.getElementById('rail-action'),()=>A.byGenreType('28|12','movie'),{dedupe:seen});
-  await fillRail(document.getElementById('rail-comedy'),()=>A.byGenreType('35','movie'),{dedupe:seen});
-  await fillRail(document.getElementById('rail-horror'),()=>A.byGenreType('27','movie'),{dedupe:seen});
-  await fillRail(document.getElementById('rail-scifi'),()=>A.byGenreType('878|14','movie'),{dedupe:seen});
-  await fillRail(document.getElementById('rail-crime'),()=>A.byGenreType('80|53','movie'),{dedupe:seen});
-  await fillRail(document.getElementById('rail-animation'),()=>A.byGenreType('16','movie'),{dedupe:seen});
-  await fillRail(document.getElementById('rail-anime'),A.animeTV,{dedupe:seen});
-  await fillRail(document.getElementById('rail-doc'),()=>A.byGenreType('99','movie'),{dedupe:seen});
+  // Genre-specific rails load concurrently — cross-genre overlap is naturally
+  // low, so the small extra duplicate risk is worth cutting several seconds
+  // of tail latency off the lower half of the page. The shared dedupe set is
+  // still safe here: JS runs each fillRail's post-fetch logic to completion
+  // before yielding, so there's no real race, just less strict ordering.
+  await Promise.all([
+    fillRail(document.getElementById('rail-action'),()=>A.byGenreType('28|12','movie'),{dedupe:seen}),
+    fillRail(document.getElementById('rail-comedy'),()=>A.byGenreType('35','movie'),{dedupe:seen}),
+    fillRail(document.getElementById('rail-horror'),()=>A.byGenreType('27','movie'),{dedupe:seen}),
+    fillRail(document.getElementById('rail-scifi'),()=>A.byGenreType('878|14','movie'),{dedupe:seen}),
+    fillRail(document.getElementById('rail-crime'),()=>A.byGenreType('80|53','movie'),{dedupe:seen}),
+    fillRail(document.getElementById('rail-animation'),()=>A.byGenreType('16','movie'),{dedupe:seen}),
+    fillRail(document.getElementById('rail-anime'),A.animeTV,{dedupe:seen}),
+    fillRail(document.getElementById('rail-doc'),()=>A.byGenreType('99','movie'),{dedupe:seen}),
+  ]);
 }
 function refreshContRow(){
   const sec=document.getElementById('continue-sec'),rail=document.getElementById('rail-continue');
@@ -697,7 +723,7 @@ function refreshContRow(){
   S.hist.slice(0,12).forEach(item=>{
     const wrap=document.createElement('div');wrap.className='cont-item';
     wrap.style.cssText='position:relative;flex:0 0 152px';
-    const card=makeCard(item,{showProgress:true,hideScore:true});wrap.appendChild(card);
+    const card=makeCard(item,{showProgress:true,hideScore:true,showPlayIcon:true});wrap.appendChild(card);
     const xBtn=document.createElement('button');xBtn.className='cont-remove-btn';
     xBtn.innerHTML='✕';
     xBtn.addEventListener('click',e=>{
@@ -712,7 +738,7 @@ function refreshContRow(){
 }
 function refreshFavPage(){
   const grid=document.getElementById('fav-grid');if(!grid)return;
-  if(!S.favs.length){grid.innerHTML=emptyHTML('Your list is empty.','Save something worth returning to.');return;}
+  if(!S.favs.length){grid.innerHTML=emptyHTML('Your list is empty.','Save something worth returning to.',EMPTY_ICON_LIST);return;}
   grid.innerHTML='';S.favs.forEach(item=>grid.appendChild(makeCard(item)));
 }
 
@@ -803,9 +829,9 @@ async function openTitlePage(item){
   const posterImg=document.getElementById('tp-poster-img');
   const posterPh=document.getElementById('tp-poster-ph');
   if(posterImg&&item.poster_path){
-    posterImg.style.display='none';
+    posterImg.style.display='block';posterImg.classList.remove('loaded');
     if(posterPh)posterPh.style.display='flex';
-    posterImg.onload=()=>{posterImg.style.display='block';if(posterPh)posterPh.style.display='none';};
+    posterImg.onload=()=>{posterImg.classList.add('loaded');if(posterPh)posterPh.style.display='none';};
     posterImg.src=`${TMDB_IMG}/w342${item.poster_path}`;
   }
 
@@ -839,9 +865,17 @@ async function openTitlePage(item){
     else openPlayer(item,'movie');
   };
   const favBtn=document.getElementById('tp-fav-btn');
-  const upFav=a=>{favBtn.classList.toggle('active',a);favBtn.querySelector('span').textContent=a?'In My List':'My List';};
+  const upFav=a=>{
+    favBtn.classList.toggle('active',a);
+    favBtn.querySelector('span').textContent=a?'In My List':'My List';
+    favBtn.querySelector('svg').setAttribute('fill',a?'currentColor':'none');
+    favBtn.title=a?'Remove from My List':'Add to My List';
+  };
   upFav(isFav(item.id));
-  favBtn.onclick=()=>{const now=toggleFav(item);upFav(now);};
+  favBtn.onclick=()=>{
+    const now=toggleFav(item);upFav(now);
+    favBtn.animate([{transform:'scale(1)'},{transform:'scale(.94)'},{transform:'scale(1)'}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
+  };
 
   // Fetch details
   const details=await A.details(item.id,type);
@@ -1066,20 +1100,33 @@ async function openPersonPage(id){
 
 /* ── Discover ── */
 let S_discoverGenre=null;
+let S_discoverYear=null;
+let S_discoverMinRating=null;
+const DISCOVER_YEAR_RANGES={
+  '2020s':{gte:'2020-01-01',lte:new Date().toISOString().slice(0,10)},
+  '2010s':{gte:'2010-01-01',lte:'2019-12-31'},
+  '2000s':{gte:'2000-01-01',lte:'2009-12-31'},
+  '1990s':{gte:'1990-01-01',lte:'1999-12-31'},
+  'older':{lte:'1989-12-31'},
+};
 async function initDiscover(){
   const loading=document.getElementById('discover-loading');
   const card=document.getElementById('discover-card');
   loading.style.display='flex';card.style.display='none';
+  const type=S.discoverType==='tv'?'tv':'movie';
+  const anyFilter=S_discoverGenre||S_discoverYear||S_discoverMinRating;
   const page=Math.floor(Math.random()*10)+1;
-  let items;
-  if(S_discoverGenre){
-    const type=S.discoverType==='tv'?'tv':'movie';
-    const d=await api(`/discover/${type}`,{with_genres:S_discoverGenre,sort_by:'vote_average.desc','vote_count.gte':'300',page});
-    items=d?.results||[];
-  }else{
-    items=S.discoverType==='movie'?await A.discoverM(page):await A.discoverTV(page);
+  const params={sort_by:'vote_average.desc','vote_count.gte':anyFilter?'100':'500',page};
+  if(S_discoverGenre)params.with_genres=S_discoverGenre;
+  if(S_discoverMinRating)params['vote_average.gte']=S_discoverMinRating;
+  const range=S_discoverYear&&DISCOVER_YEAR_RANGES[S_discoverYear];
+  if(range){
+    const field=type==='tv'?'first_air_date':'primary_release_date';
+    if(range.gte)params[`${field}.gte`]=range.gte;
+    if(range.lte)params[`${field}.lte`]=range.lte;
   }
-  S.discoverItems=items.filter(i=>i.backdrop_path&&i.overview);
+  const d=await api(`/discover/${type}`,params);
+  S.discoverItems=(d?.results||[]).filter(i=>i.backdrop_path&&i.overview);
   S.discoverIdx=0;
   loading.style.display='none';card.style.display='block';
   renderDiscover();
@@ -1349,6 +1396,63 @@ function updateEpCounter(){
 }
 
 /* ── Keyboard ── */
+/* ── Rail scroll arrows ── */
+function initRailArrows(){
+  document.querySelectorAll('.rail,.cast-rail').forEach(rail=>{
+    if(rail.dataset.arrowsInit)return;
+    rail.dataset.arrowsInit='1';
+
+    const wrap=document.createElement('div');
+    wrap.className='rail-arrow-wrap';
+    rail.parentNode.insertBefore(wrap,rail);
+    wrap.appendChild(rail);
+
+    const mkBtn=(dir,d)=>{
+      const b=document.createElement('button');
+      b.className=`rail-arrow rail-arrow-${dir}`;
+      b.setAttribute('aria-label',dir==='prev'?'Scroll left':'Scroll right');
+      b.innerHTML=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${d}"/></svg>`;
+      return b;
+    };
+    const prevBtn=mkBtn('prev','m15 18-6-6 6-6');
+    const nextBtn=mkBtn('next','m9 18 6-6-6-6');
+    wrap.appendChild(prevBtn);wrap.appendChild(nextBtn);
+
+    const amount=()=>rail.clientWidth*0.8;
+    prevBtn.addEventListener('click',()=>rail.scrollBy({left:-amount(),behavior:'smooth'}));
+    nextBtn.addEventListener('click',()=>rail.scrollBy({left:amount(),behavior:'smooth'}));
+
+    const update=()=>{
+      const canScroll=rail.scrollWidth>rail.clientWidth+10;
+      wrap.classList.toggle('has-overflow',canScroll);
+      prevBtn.classList.toggle('show',canScroll&&rail.scrollLeft>10);
+      nextBtn.classList.toggle('show',canScroll&&rail.scrollLeft<rail.scrollWidth-rail.clientWidth-10);
+    };
+    rail.addEventListener('scroll',update,{passive:true});
+    window.addEventListener('resize',update);
+    new MutationObserver(update).observe(rail,{childList:true});
+    update();
+  });
+}
+
+/* ── Ripple micro-interaction (event-delegated, covers dynamic buttons too) ── */
+function initRipple(){
+  const RIPPLE_SELECTOR='.btn-primary,.btn-ghost,.tp-icon-btn,.nav-search-btn,.discover-genre-chip,.mood-chip,.rail-arrow';
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest(RIPPLE_SELECTOR);
+    if(!btn||btn.disabled)return;
+    const rect=btn.getBoundingClientRect();
+    const size=Math.max(rect.width,rect.height)*1.6;
+    const ripple=document.createElement('span');
+    ripple.className='ripple-el';
+    ripple.style.width=ripple.style.height=`${size}px`;
+    ripple.style.left=`${(e.clientX??rect.left+rect.width/2)-rect.left-size/2}px`;
+    ripple.style.top=`${(e.clientY??rect.top+rect.height/2)-rect.top-size/2}px`;
+    btn.appendChild(ripple);
+    ripple.addEventListener('animationend',()=>ripple.remove());
+  });
+}
+
 function initKeyboard(){
   document.addEventListener('keydown',e=>{
     if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;
@@ -1583,6 +1687,16 @@ document.addEventListener('DOMContentLoaded',()=>{
       btn.classList.add('active');S_discoverGenre=btn.dataset.g||null;initDiscover();
     });
   });
+  document.getElementById('discover-year-filter')?.addEventListener('change',e=>{
+    S_discoverYear=e.target.value||null;
+    e.target.classList.toggle('active',!!S_discoverYear);
+    initDiscover();
+  });
+  document.getElementById('discover-rating-filter')?.addEventListener('change',e=>{
+    S_discoverMinRating=e.target.value||null;
+    e.target.classList.toggle('active',!!S_discoverMinRating);
+    initDiscover();
+  });
   document.getElementById('discover-type-movie')?.addEventListener('click',()=>{
     S.discoverType='movie';
     document.querySelectorAll('.discover-type-btn').forEach(b=>b.classList.toggle('active',b.dataset.t==='movie'));
@@ -1621,7 +1735,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     }).observe(srcPanel,{attributes:true,attributeFilter:['class']});
   }
   // Setup
-  setupGenres();initKeyboard();initDiscoverSwipe();
+  setupGenres();initKeyboard();initDiscoverSwipe();initRipple();initRailArrows();
   // Boot
   goTo(startPage,true);
   if(startPage==='movies')navTo('movies');

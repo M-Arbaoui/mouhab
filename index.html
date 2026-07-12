@@ -189,35 +189,35 @@
     <div class="section-head"><h2 class="section-title">Top Rated Series</h2></div>
     <div id="rail-toptv" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-action">
     <div class="section-head"><h2 class="section-title">Action &amp; Adventure</h2></div>
     <div id="rail-action" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-comedy">
     <div class="section-head"><h2 class="section-title">Comedies</h2></div>
     <div id="rail-comedy" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-horror">
     <div class="section-head"><h2 class="section-title">Horror</h2></div>
     <div id="rail-horror" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-scifi">
     <div class="section-head"><h2 class="section-title">Sci-Fi &amp; Fantasy</h2></div>
     <div id="rail-scifi" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-crime">
     <div class="section-head"><h2 class="section-title">Crime &amp; Thrillers</h2></div>
     <div id="rail-crime" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-animation">
     <div class="section-head"><h2 class="section-title">Animation</h2></div>
     <div id="rail-animation" class="rail"></div>
   </section>
-  <section class="section">
+  <section class="section" id="section-anime">
     <div class="section-head"><h2 class="section-title">Anime</h2></div>
     <div id="rail-anime" class="rail"></div>
   </section>
-  <section class="section" style="padding-bottom:72px">
+  <section class="section" id="section-doc" style="padding-bottom:72px">
     <div class="section-head"><h2 class="section-title">Documentaries</h2></div>
     <div id="rail-doc" class="rail"></div>
   </section>
@@ -275,6 +275,23 @@
         <button class="discover-genre-chip" data-g="16">Animation</button>
         <button class="discover-genre-chip" data-g="99">Documentary</button>
         <button class="discover-genre-chip" data-g="80">Crime</button>
+      </div>
+      <div class="discover-filters">
+        <select class="discover-filter-select" id="discover-year-filter" aria-label="Release year">
+          <option value="">Any Year</option>
+          <option value="2020s">2020s</option>
+          <option value="2010s">2010s</option>
+          <option value="2000s">2000s</option>
+          <option value="1990s">1990s</option>
+          <option value="older">Before 1990</option>
+        </select>
+        <select class="discover-filter-select" id="discover-rating-filter" aria-label="Minimum rating">
+          <option value="">Any Rating</option>
+          <option value="9">9+ Rating</option>
+          <option value="8">8+ Rating</option>
+          <option value="7">7+ Rating</option>
+          <option value="6">6+ Rating</option>
+        </select>
       </div>
     </div>
 
