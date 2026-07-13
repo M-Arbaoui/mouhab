@@ -955,99 +955,69 @@ const castPH=()=>`<div class="cast-ph"><svg viewBox="0 0 24 24" fill="none" stro
    SEASON / EPISODE DROPDOWNS
    ══════════════════════════════════════════ */
 function buildTitlePageSeasons(item,details){
-  const n=details.number_of_seasons;
   const seasons=(details.seasons||[]).filter(s=>s.season_number>0);
-  const head=document.getElementById('tp-season-tabs');
+  const pillsWrap=document.getElementById('tp-season-tabs');
   const list=document.getElementById('tp-ep-list');
-  head.innerHTML='';
+  pillsWrap.innerHTML='';
 
-  // Season dropdown
-  const seasonSel=document.createElement('select');
-  seasonSel.className='season-dropdown';
-  seasonSel.setAttribute('aria-label','Select season');
-  seasons.forEach(s=>{
-    const opt=document.createElement('option');
-    opt.value=s.season_number;
-    opt.textContent=`Season ${s.season_number}${s.episode_count?` (${s.episode_count} eps)`:''}`;
-    seasonSel.appendChild(opt);
+  const lastEp=getLastEp(item.id);
+  let activeSeason=lastEp?.season&&seasons.some(s=>s.season_number===lastEp.season)?lastEp.season:seasons[0]?.season_number||1;
+
+  const pills=seasons.map(s=>{
+    const pill=document.createElement('button');
+    pill.className=`tp-season-pill${s.season_number===activeSeason?' active':''}`;
+    pill.textContent=`Season ${s.season_number}`;
+    pill.addEventListener('click',()=>{
+      if(pill.classList.contains('active'))return;
+      pills.forEach(p=>p.classList.remove('active'));
+      pill.classList.add('active');
+      loadSeasonEps(s.season_number);
+    });
+    pillsWrap.appendChild(pill);
+    return pill;
   });
-  head.appendChild(seasonSel);
 
-  // Episode dropdown (populated on season change)
-  const epSel=document.createElement('select');
-  epSel.className='ep-dropdown';
-  epSel.setAttribute('aria-label','Select episode');
-  head.appendChild(epSel);
-
-  // Watch selected episode button
-  const watchEpBtn=document.createElement('button');
-  watchEpBtn.className='btn-primary btn-watch-ep';
-  watchEpBtn.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg> Watch`;
-  watchEpBtn.onclick=()=>{
-    const s=parseInt(seasonSel.value);
-    const e=parseInt(epSel.value);
-    const epName=epSel.options[epSel.selectedIndex]?.dataset.name||'';
-    openPlayer(item,'tv',s,e,epName);
-  };
-  head.appendChild(watchEpBtn);
-
-  // Load episode list on season change
   async function loadSeasonEps(sNum){
-    epSel.innerHTML='<option>Loading…</option>';
-    epSel.disabled=true;
     list.innerHTML=`<div class="ep-loading">Loading episodes…</div>`;
 
-    // Cache season data
-    if(!S.playerSeasonData[item.id]) S.playerSeasonData[item.id]={};
+    if(!S.playerSeasonData[item.id])S.playerSeasonData[item.id]={};
     if(!S.playerSeasonData[item.id][sNum]){
       S.playerSeasonData[item.id][sNum]=await A.season(item.id,sNum);
     }
-    const data=S.playerSeasonData[item.id][sNum];
-    const eps=data?.episodes||[];
+    const eps=S.playerSeasonData[item.id][sNum]?.episodes||[];
 
-    // Populate episode dropdown
-    epSel.innerHTML='';
-    eps.forEach(ep=>{
-      const opt=document.createElement('option');
-      opt.value=ep.episode_number;
-      opt.dataset.name=ep.name||'';
-      const pct=getProg(item.id,'tv',sNum,ep.episode_number);
-      opt.textContent=`E${ep.episode_number} — ${ep.name||'Episode '+ep.episode_number}${pct>5?` (${pct}%)`:''}`;
-      epSel.appendChild(opt);
-    });
-    epSel.disabled=false;
-
-    // Auto-select last watched in this season
-    const lastEp=getLastEp(item.id);
-    if(lastEp&&lastEp.season===sNum){
-      epSel.value=lastEp.episode;
-    }
-
-    // Render episode grid
     list.innerHTML='';
     eps.forEach(ep=>{
       const pct=getProg(item.id,'tv',sNum,ep.episode_number);
+      const isLast=lastEp&&lastEp.season===sNum&&lastEp.episode===ep.episode_number;
       const still=ep.still_path?`${TMDB_IMG}/w300${ep.still_path}`:null;
-      const row=document.createElement('div');row.className='ep-item';
+      const row=document.createElement('div');row.className=`ep-item${isLast?' ep-item-current':''}`;
+      row.tabIndex=0;row.setAttribute('role','button');
+      row.setAttribute('aria-label',`Episode ${ep.episode_number}, ${ep.name||'Episode '+ep.episode_number}`);
       row.innerHTML=`
-        ${still?`<img class="ep-still" src="${still}" alt="" loading="lazy">`:`<div class="ep-still ep-still-ph"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1"><path d="m7 8 4 3-4 3V8z"/></svg></div>`}
+        <div class="ep-still-wrap">
+          ${still?`<img class="ep-still" src="${still}" alt="" loading="lazy">`:`<div class="ep-still ep-still-ph"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1"><path d="m7 8 4 3-4 3V8z"/></svg></div>`}
+          <div class="ep-still-play"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg></div>
+          ${pct>0?`<div class="ep-prog-bar"><div class="ep-prog-fill" style="width:${pct}%"></div></div>`:''}
+        </div>
         <div class="ep-info">
           <div class="ep-info-top">
             <span class="ep-num">E${ep.episode_number}</span>
             <span class="ep-name">${ep.name||'Episode '+ep.episode_number}</span>
             ${ep.runtime?`<span class="ep-dur">${ep.runtime}m</span>`:''}
+            ${isLast?`<span class="ep-current-tag">Continue</span>`:''}
           </div>
           ${ep.overview?`<div class="ep-overview">${ep.overview.slice(0,120)}${ep.overview.length>120?'…':''}</div>`:''}
-          ${pct>0?`<div class="ep-prog-bar"><div class="ep-prog-fill" style="width:${pct}%"></div></div>`:''}
-        </div>
-        <span class="ep-arr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>`;
+        </div>`;
       row.addEventListener('click',()=>openPlayer(item,'tv',sNum,ep.episode_number,ep.name));
+      row.addEventListener('keydown',e=>{
+        if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlayer(item,'tv',sNum,ep.episode_number,ep.name);}
+      });
       list.appendChild(row);
     });
   }
 
-  seasonSel.addEventListener('change',()=>loadSeasonEps(parseInt(seasonSel.value)));
-  loadSeasonEps(1);
+  loadSeasonEps(activeSeason);
 }
 
 /* ── Person page ── */
@@ -1409,7 +1379,7 @@ function initRailArrows(){
 
 /* ── Ripple micro-interaction (event-delegated, covers dynamic buttons too) ── */
 function initRipple(){
-  const RIPPLE_SELECTOR='.btn-primary,.btn-ghost,.tp-icon-btn,.nav-search-btn,.discover-genre-chip,.mood-chip,.rail-arrow';
+  const RIPPLE_SELECTOR='.btn-primary,.btn-ghost,.tp-icon-btn,.nav-search-btn,.discover-genre-chip,.mood-chip,.rail-arrow,.tp-season-pill';
   document.addEventListener('click',e=>{
     const btn=e.target.closest(RIPPLE_SELECTOR);
     if(!btn||btn.disabled)return;
