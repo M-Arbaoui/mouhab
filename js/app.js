@@ -32,13 +32,36 @@ const HOME_GENRE_NAV=[
 ];
 
 /* ── State ── */
+/* ── Safe localStorage (corrupted data or a storage failure should never
+   break the app - worst case it just forgets, it doesn't crash) ── */
+function lsGetRaw(key,fallback=null){
+  try{const v=localStorage.getItem(key);return v===null?fallback:v;}
+  catch(_){return fallback;}
+}
+function lsSetRaw(key,value){
+  try{localStorage.setItem(key,value);return true;}catch(_){return false;}
+}
+function lsGetJSON(key,fallback){
+  try{
+    const raw=localStorage.getItem(key);
+    if(raw===null)return fallback;
+    return JSON.parse(raw);
+  }catch(_){
+    try{localStorage.removeItem(key);}catch(_){} // drop the corrupted entry so it doesn't keep failing
+    return fallback;
+  }
+}
+function lsSetJSON(key,value){
+  try{localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){return false;}
+}
+
 const S={
   page:'home',lastPage:'home',
   scrollPositions:{},
   heroItems:[],heroIdx:0,heroTimer:null,
-  favs:JSON.parse(localStorage.getItem('wt_favs')||'[]'),
-  hist:JSON.parse(localStorage.getItem('wt_hist')||'[]'),
-  prog:JSON.parse(localStorage.getItem('wt_prog')||'{}'),
+  favs:lsGetJSON('wt_favs',[]),
+  hist:lsGetJSON('wt_hist',[]),
+  prog:lsGetJSON('wt_prog',{}),
   moviesLoaded:false,seriesLoaded:false,
   moviesPage:1,seriesPage:1,moviesLoading:false,seriesLoading:false,
   moviesDone:false,seriesDone:false,
@@ -49,15 +72,15 @@ const S={
   discoverItems:[],discoverIdx:0,discoverType:'movie',
   playerOpenTime:0,playerRuntime:0,
 };
-(()=>{const p=localStorage.getItem('wt_page');if(p&&p!=='player'){S.page=p;S.lastPage=p;}})();
+(()=>{const p=lsGetRaw('wt_page');if(p&&p!=='player'){S.page=p;S.lastPage=p;}})();
 
 /* ── Persist ── */
 const save=()=>{
-  localStorage.setItem('wt_favs',JSON.stringify(S.favs));
-  localStorage.setItem('wt_hist',JSON.stringify(S.hist));
-  localStorage.setItem('wt_prog',JSON.stringify(S.prog));
+  lsSetJSON('wt_favs',S.favs);
+  lsSetJSON('wt_hist',S.hist);
+  lsSetJSON('wt_prog',S.prog);
 };
-const savePage=p=>{if(p!=='player'&&p!=='title'){localStorage.setItem('wt_page',p);S.lastPage=p;}};
+const savePage=p=>{if(p!=='player'&&p!=='title'){lsSetRaw('wt_page',p);S.lastPage=p;}};
 const progKey=(id,t,s,e)=>t==='movie'?`m_${id}`:`tv_${id}_${s}_${e}`;
 const getProg=(id,t,s=1,e=1)=>S.prog[progKey(id,t,s,e)]||0;
 function saveProg(id,type,season,ep,pct){
@@ -100,7 +123,7 @@ const A={
   topRated:()=>api('/movie/top_rated').then(d=>d?.results||[]),
   nowPlaying:()=>api('/movie/now_playing').then(d=>d?.results||[]),
   topTV:()=>api('/tv/top_rated').then(d=>d?.results||[]),
-  details:(id,t)=>api(`/${t}/${id}`,{append_to_response:'credits,belongs_to_collection,watch/providers,external_ids'}),
+  details:(id,t)=>api(`/${t}/${id}`,{append_to_response:'credits,belongs_to_collection'}),
   season:(id,s)=>api(`/tv/${id}/season/${s}`),
   search:q=>api('/search/multi',{query:q}).then(d=>(d?.results||[]).filter(r=>r.media_type!=='person')),
   byGenre:g=>api('/discover/movie',{with_genres:g,sort_by:'popularity.desc'}).then(d=>d?.results||[]),
@@ -206,39 +229,65 @@ const SERVERS=[
     tv:(id,s,e)=>`https://vidnest.online/embed/tv/${id}/${s}/${e}`,
   },
 ];
-let _currentServer=parseInt(localStorage.getItem('wt_server')||'0');
+let _currentServer=parseInt(lsGetRaw('wt_server','0'));
 const getCurrentServer=()=>SERVERS[_currentServer]||SERVERS[0];
 function setServer(idx){
-  _currentServer=idx;localStorage.setItem('wt_server',idx);
+  _currentServer=idx;lsSetRaw('wt_server',idx);
   buildServerSwitcher();
   if(S.playerItem)loadVidSrcWithServer(S.playerItem.id,S.playerType,S.playerSeason,S.playerEp);
 }
 
 /* ── Routing ── */
+let _pageTransitionTimer=null;
 function goTo(name,skipSave=false,restoreScroll=false){
   if(S.page==='player'&&name!=='player')stopPlayer();
   clearToast();closeSearch();
   if(S.page&&S.page!=='player'&&S.page!=='title'){
     S.scrollPositions[S.page]=window.scrollY;
   }
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById(`page-${name}`)?.classList.add('active');
-  document.querySelectorAll('.nav-link[data-page]').forEach(l=>l.classList.toggle('active',l.dataset.page===name));
-  document.querySelectorAll('.bot-nav-item[data-page]').forEach(l=>l.classList.toggle('active',l.dataset.page===name));
-  const nav=document.getElementById('nav'),bot=document.querySelector('.bot-nav');
-  if(name==='player'){
-    nav.classList.add('hidden');
-    if(bot)bot.style.display='none';
+
+  const applySwitch=()=>{
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active','page-leaving'));
+    document.getElementById(`page-${name}`)?.classList.add('active');
+    document.querySelectorAll('.nav-link[data-page]').forEach(l=>l.classList.toggle('active',l.dataset.page===name));
+    document.querySelectorAll('.bot-nav-item[data-page]').forEach(l=>l.classList.toggle('active',l.dataset.page===name));
+    const nav=document.getElementById('nav'),bot=document.querySelector('.bot-nav');
+    if(name==='player'){
+      nav.classList.add('hidden');
+      if(bot)bot.style.display='none';
+    }else{
+      nav.classList.remove('hidden');
+      if(bot&&window.innerWidth<=800)bot.style.display='flex';
+    }
+    S.page=name;
+    if(!skipSave)savePage(name);
+    // The URL hash is only ever set by openTitlePage (for deep-linking to a
+    // title). Leaving it in place after navigating elsewhere means a refresh
+    // on, say, Home would silently reopen whatever title was last viewed —
+    // so clear it here on every navigation that isn't to the title page.
+    if(name!=='title'&&window.location.hash){
+      history.replaceState(null,'',window.location.pathname+window.location.search);
+    }
+    if(restoreScroll&&S.scrollPositions[name]!==undefined){
+      requestAnimationFrame(()=>window.scrollTo(0,S.scrollPositions[name]));
+    }else{
+      window.scrollTo(0,0);
+    }
+  };
+
+  clearTimeout(_pageTransitionTimer);
+  const current=document.querySelector('.page.active');
+  const reduceMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  // Skip the exit animation when there's nothing visibly changing (first
+  // load, or navigating to the page already showing), and when heading into
+  // the player — the cinematic loader is already fully opaque over the
+  // screen by that point, so an exit fade underneath it would be wasted.
+  if(current&&current.id!==`page-${name}`&&name!=='player'&&!reduceMotion){
+    current.classList.remove('active');
+    current.classList.add('page-leaving');
+    _pageTransitionTimer=setTimeout(applySwitch,150);
   }else{
-    nav.classList.remove('hidden');
-    if(bot&&window.innerWidth<=800)bot.style.display='flex';
-  }
-  S.page=name;
-  if(!skipSave)savePage(name);
-  if(restoreScroll&&S.scrollPositions[name]!==undefined){
-    requestAnimationFrame(()=>window.scrollTo(0,S.scrollPositions[name]));
-  }else{
-    window.scrollTo(0,0);
+    applySwitch();
   }
 }
 
@@ -307,15 +356,15 @@ function clearSearchOnEmpty(q){if(!q.trim())renderSearchHist();}
 
 /* ── Search history ── */
 const SEARCH_HIST_KEY='wt_srch';
-const getSearchHist=()=>JSON.parse(localStorage.getItem(SEARCH_HIST_KEY)||'[]');
+const getSearchHist=()=>lsGetJSON(SEARCH_HIST_KEY,[]);
 function addSearchHist(q){
   if(!q||q.length<2)return;
   let hist=getSearchHist().filter(h=>h!==q);
   hist.unshift(q);
   if(hist.length>10)hist=hist.slice(0,10);
-  localStorage.setItem(SEARCH_HIST_KEY,JSON.stringify(hist));
+  lsSetJSON(SEARCH_HIST_KEY,hist);
 }
-function clearSearchHist(){localStorage.removeItem(SEARCH_HIST_KEY);renderSearchHist();}
+function clearSearchHist(){try{localStorage.removeItem(SEARCH_HIST_KEY);}catch(_){}renderSearchHist();}
 
 /* ── Trending searches (derived from trending titles, fetched once per session) ── */
 let _trendingSearchCache=null;
@@ -511,8 +560,9 @@ function makeCard(item,opts={}){
   });
   return wrap;
 }
-const skels=(n=8)=>Array.from({length:n},()=>{
+const skels=(n=8)=>Array.from({length:n},(_,i)=>{
   const d=document.createElement('div');d.className='card-sk-wrap';
+  d.style.animationDelay=`${i*70}ms`;
   d.innerHTML=`<div class="card-sk"></div><div class="card-sk-line card-sk-line-a"></div><div class="card-sk-line card-sk-line-b"></div>`;
   return d;
 });
@@ -727,10 +777,18 @@ function refreshContRow(){
     xBtn.innerHTML='✕';
     xBtn.addEventListener('click',e=>{
       e.stopPropagation();
-      const idx=S.hist.findIndex(h=>h.id===item.id);if(idx>-1)S.hist.splice(idx,1);
-      const type=item.media_type||(item.first_air_date?'tv':'movie');
-      Object.keys(S.prog).filter(k=>k.startsWith(type==='movie'?`m_${item.id}`:`tv_${item.id}_`)).forEach(k=>delete S.prog[k]);
-      save();refreshContRow();showToast('Removed from Continue Watching');
+      wrap.classList.add('cont-item-vanish');
+      showToast('Removed from Continue Watching');
+      const finish=()=>{
+        const idx=S.hist.findIndex(h=>h.id===item.id);if(idx>-1)S.hist.splice(idx,1);
+        const type=item.media_type||(item.first_air_date?'tv':'movie');
+        Object.keys(S.prog).filter(k=>k.startsWith(type==='movie'?`m_${item.id}`:`tv_${item.id}_`)).forEach(k=>delete S.prog[k]);
+        save();
+        wrap.remove();
+        if(!S.hist.length)sec.style.display='none';
+      };
+      wrap.addEventListener('animationend',finish,{once:true});
+      setTimeout(finish,500); // safety net in case animationend never fires
     });
     wrap.appendChild(xBtn);rail.appendChild(wrap);
   });
@@ -742,59 +800,6 @@ function refreshFavPage(){
 }
 
 /* ══════════════════════════════════════════
-   JUSTWATCH / IMDB
-   ══════════════════════════════════════════ */
-const JW_SERVICES={
-  8:{name:'Netflix',logo:'https://image.tmdb.org/t/p/original/t2yyOv40HZeVlLjYsCsPHnWLk4W.jpg'},
-  337:{name:'Disney+',logo:'https://image.tmdb.org/t/p/original/7rwgEs15tFwyR9NPQ5vpzxTj19Q.jpg'},
-  9:{name:'Prime Video',logo:'https://image.tmdb.org/t/p/original/dQeAar5H991VYporEjUspolDarG.jpg'},
-  384:{name:'Max',logo:'https://image.tmdb.org/t/p/original/Ajqyt5aNxNvaG0sDlKm0F7ReiID.jpg'},
-  15:{name:'Hulu',logo:'https://image.tmdb.org/t/p/original/zxrVdFjIjLqkfnwyghnfywTn3Lh.jpg'},
-  531:{name:'Paramount+',logo:'https://image.tmdb.org/t/p/original/xbhHHa1YgtpwhC8lb1NQ3ACVcLd.jpg'},
-  2:{name:'Apple TV+',logo:'https://image.tmdb.org/t/p/original/peURlLlr8jggOwK53fJ5wdQl05y.jpg'},
-  283:{name:'Crunchyroll',logo:'https://image.tmdb.org/t/p/original/8Gt1iClBlzTeQs8WQm8UrCoIxnQ.jpg'},
-};
-const JW_IDS=new Set(Object.keys(JW_SERVICES).map(Number));
-function parseWatchProviders(watchData){
-  const region=(watchData?.results||{})['US']||(watchData?.results||{})['GB']||Object.values(watchData?.results||{})[0];
-  if(!region)return[];
-  const flat=region.flatrate||[],ads=region.ads||[],rent=[...(region.rent||[]),(region.buy||[])];
-  const seen=new Set(),out=[];
-  for(const p of [...flat,...ads,...rent]){
-    if(seen.has(p.provider_id)||!JW_IDS.has(p.provider_id))continue;
-    seen.add(p.provider_id);
-    const svc=JW_SERVICES[p.provider_id];
-    out.push({
-      id:p.provider_id,name:svc.name,
-      logo:p.logo_path?`${TMDB_IMG}/w45${p.logo_path}`:svc.logo,
-      type:flat.some(x=>x.provider_id===p.provider_id)?'stream':ads.some(x=>x.provider_id===p.provider_id)?'ads':'rent',
-    });
-  }
-  return out;
-}
-function renderImdbBlock(details){
-  const block=document.getElementById('tp-imdb-block');if(!block)return;
-  const v=details.vote_average,c=details.vote_count,imdb_id=details.external_ids?.imdb_id;
-  if(!v){block.style.display='none';return;}
-  const score=v.toFixed(1),stars=Math.round(v/2);
-  const starsHtml=Array.from({length:5},(_,i)=>`<svg class="imdb-star${i<stars?' filled':''}" viewBox="0 0 24 24" width="14" height="14"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`).join('');
-  const votes=c>=1e6?(c/1e6).toFixed(1)+'M':c>=1000?Math.round(c/1000)+'K':String(c||'');
-  block.innerHTML=`<div class="imdb-badge"><div class="imdb-logo-wrap"><span class="imdb-logo-text">IMDb</span></div><div class="imdb-score-wrap"><span class="imdb-score">${score}</span><span class="imdb-max">/10</span></div><div class="imdb-stars">${starsHtml}</div>${votes?`<div class="imdb-votes">${votes} votes</div>`:''}${imdb_id?`<a class="imdb-link" href="https://www.imdb.com/title/${imdb_id}/" target="_blank" rel="noopener">IMDb ↗</a>`:''}</div>`;
-  block.style.display='block';
-}
-function renderJustWatchBlock(watchProviders){
-  const block=document.getElementById('tp-justwatch-block');if(!block)return;
-  const providers=parseWatchProviders(watchProviders);
-  if(!providers.length){block.style.display='none';return;}
-  const streaming=providers.filter(p=>p.type==='stream');
-  const adFree=providers.filter(p=>p.type==='ads');
-  const rent=providers.filter(p=>p.type==='rent');
-  const rg=(label,list)=>!list.length?'':`<div class="jw-group"><div class="jw-group-label">${label}</div><div class="jw-logos">${list.map(p=>`<div class="jw-provider" title="${p.name}">${p.logo?`<img src="${p.logo}" alt="${p.name}" class="jw-logo" loading="lazy">`:`<span class="jw-logo-text">${p.name.slice(0,2)}</span>`}<span class="jw-name">${p.name}</span></div>`).join('')}</div></div>`;
-  block.innerHTML=`<div class="jw-block"><div class="jw-header"><span class="jw-title">Where to Watch</span><span class="jw-powered">via JustWatch</span></div>${rg('Stream',streaming)}${rg('Free with Ads',adFree)}${rg('Rent / Buy',rent)}</div>`;
-  block.style.display='block';
-}
-
-/* ══════════════════════════════════════════
    TITLE PAGE
    ══════════════════════════════════════════ */
 async function openTitlePage(item){
@@ -803,6 +808,12 @@ async function openTitlePage(item){
   const type=mtyp(item);
   setHash(`/title/${type}/${item.id}`);
   goTo('title');
+
+  // Re-arm scroll-reveal for this page's sections — they're static, reused
+  // containers, so without this a section only ever animates in once per
+  // app session instead of on every title you open.
+  document.querySelectorAll('.tp-section').forEach(el=>el.classList.remove('reveal-in','reveal-el'));
+  requestAnimationFrame(initScrollReveal);
 
   // Backdrop — blurred low-res placeholder appears instantly, full-res crossfades in on top
   const tp=document.getElementById('tp-backdrop');
@@ -842,10 +853,9 @@ async function openTitlePage(item){
   document.getElementById('tp-type-badge').textContent=type==='tv'?'Series':'Movie';
 
   // Reset
-  ['tp-genres','tp-cast-rail','tp-ep-list','tp-collection-rail','tp-similar-rail','tp-imdb-block','tp-justwatch-block'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
+  ['tp-genres','tp-cast-rail','tp-ep-list','tp-collection-rail','tp-similar-rail'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
   ['tp-eps-section','tp-collection-sec','tp-similar-sec'].forEach(id=>document.getElementById(id).style.display='none');
   ['tp-runtime','tp-seasons'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='';});
-  ['tp-imdb-block','tp-justwatch-block'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
 
   // Skeleton cast
   document.getElementById('tp-cast-rail').innerHTML=Array.from({length:6},()=>`<div class="cast-skel"><div class="cast-skel-face"></div><div class="cast-skel-line"></div></div>`).join('');
@@ -896,9 +906,6 @@ async function openTitlePage(item){
     });
     gEl.appendChild(pill);
   });
-
-  renderImdbBlock(details);
-  renderJustWatchBlock(details['watch/providers']);
 
   // Cast
   const cast=(details.credits?.cast||[]).slice(0,14);
@@ -1339,6 +1346,33 @@ function updateEpCounter(){
 
 /* ── Keyboard ── */
 /* ── Rail scroll arrows ── */
+/* ── Scroll-reveal ── */
+let _revealObserver=null;
+function initScrollReveal(){
+  if(_revealObserver)_revealObserver.disconnect();
+  _revealObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        entry.target.classList.add('reveal-in');
+        _revealObserver.unobserve(entry.target);
+      }
+    });
+  },{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('.section,.tp-section').forEach(el=>{
+    if(el.classList.contains('reveal-in'))return;
+    // Already on screen right now (e.g. above the fold on initial load) —
+    // don't hide-then-fade it back in, that's a flash, not an entrance.
+    // Just leave it fully visible and skip straight to "already revealed".
+    const rect=el.getBoundingClientRect();
+    if(rect.top<window.innerHeight&&rect.bottom>0){
+      el.classList.add('reveal-in');
+      return;
+    }
+    el.classList.add('reveal-el');
+    _revealObserver.observe(el);
+  });
+}
+
 function initRailArrows(){
   document.querySelectorAll('.rail,.cast-rail').forEach(rail=>{
     if(rail.dataset.arrowsInit)return;
@@ -1424,7 +1458,7 @@ window.addEventListener('scroll',()=>{
 let _installPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_installPrompt=e;});
 function showInstallBanner(){
-  if(localStorage.getItem('wt_install_dismissed'))return;
+  if(lsGetRaw('wt_install_dismissed'))return;
   if(window.matchMedia('(display-mode: standalone)').matches)return;
   const banner=document.getElementById('install-banner');if(!banner)return;
   banner.classList.add('show');setTimeout(()=>banner.classList.remove('show'),5000);
@@ -1443,8 +1477,8 @@ setInterval(async()=>{
 },5*60*1000);
 
 /* ── Hash routing ── */
-async function routeFromHash(){
-  let hash=window.location.hash.slice(1);
+async function routeFromHash(hashOverride){
+  let hash=(hashOverride??window.location.hash).slice(1);
   if(!hash||hash==='#')return;
   if(hash.startsWith('/'))hash=hash.slice(1);
   const parts=hash.split('/').filter(Boolean);
@@ -1675,8 +1709,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     }).observe(srcPanel,{attributes:true,attributeFilter:['class']});
   }
   // Setup
-  setupGenres();initKeyboard();initDiscoverSwipe();initRipple();initRailArrows();
+  setupGenres();initKeyboard();initDiscoverSwipe();initRipple();initRailArrows();initScrollReveal();
   // Boot
+  const bootHash=window.location.hash; // captured before goTo can clear it below
   goTo(startPage,true);
   if(startPage==='movies')navTo('movies');
   else if(startPage==='series')navTo('series');
@@ -1684,7 +1719,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(startPage==='discover')navTo('discover');
   else loadHome();
   if(startPage!=='home')loadHome();
-  if(window.location.hash)routeFromHash();
+  if(bootHash)routeFromHash(bootHash);
   // PWA
   if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
   setTimeout(showInstallBanner,2000);
@@ -1692,10 +1727,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('install-banner')?.classList.remove('show');
     if(_installPrompt){_installPrompt.prompt();await _installPrompt.userChoice;_installPrompt=null;}
     else showToast('On Chrome: Menu → "Add to Home Screen"');
-    localStorage.setItem('wt_install_dismissed','1');
+    lsSetRaw('wt_install_dismissed','1');
   });
   document.getElementById('install-dismiss')?.addEventListener('click',()=>{
     document.getElementById('install-banner')?.classList.remove('show');
-    localStorage.setItem('wt_install_dismissed','1');
+    lsSetRaw('wt_install_dismissed','1');
   });
 });

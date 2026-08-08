@@ -67,14 +67,7 @@ select{appearance:none;-webkit-appearance:none}
 ════════════════════════════════ */
 .page{display:none;animation:pgIn .32s var(--ease) both}
 .page.active{display:block}
-@keyframes pgIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
-
-/* Exit motion — display:none can't be animated, so a page leaving still
-   needs a brief moment with .page-leaving applied (and .active removed but
-   display still overridden to block) before it's actually torn down, or it
-   would just vanish with no exit feel at all. */
-.page.page-leaving{display:block;animation:pgOut .18s var(--ease) both}
-@keyframes pgOut{to{opacity:0;transform:translateY(-8px) scale(.98)}}
+@keyframes pgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* Title page gets a more cinematic reveal — fade + gentle scale + light blur,
    like a shot pulling into focus, rather than the generic page slide-up. */
@@ -701,15 +694,6 @@ select{appearance:none;-webkit-appearance:none}
 /* Continue watching */
 .cont-item{position:relative;flex:0 0 160px;min-width:0}
 .rail .cont-item{max-width:160px}
-.cont-item-vanish{
-  animation:contVanish .42s cubic-bezier(.4,0,.6,1) both;
-  pointer-events:none;
-}
-@keyframes contVanish{
-  0%{opacity:1;transform:scale(1) translateY(0);max-width:160px}
-  45%{opacity:0;transform:scale(.82) translateY(6px);max-width:160px}
-  100%{opacity:0;transform:scale(.82) translateY(6px);max-width:0}
-}
 .cont-remove-btn{
   position:absolute;top:8px;left:8px;z-index:10;
   width:24px;height:24px;border-radius:50%;
