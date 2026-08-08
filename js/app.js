@@ -261,11 +261,11 @@ function goTo(name,skipSave=false,restoreScroll=false){
     }
     S.page=name;
     if(!skipSave)savePage(name);
-    // The URL hash is only ever set by openTitlePage (for deep-linking to a
-    // title). Leaving it in place after navigating elsewhere means a refresh
-    // on, say, Home would silently reopen whatever title was last viewed —
-    // so clear it here on every navigation that isn't to the title page.
-    if(name!=='title'&&window.location.hash){
+    // The URL hash is only ever set by openTitlePage/openPlayer (for deep-
+    // linking). Leaving it in place after navigating elsewhere means a
+    // refresh on, say, Home would silently reopen whatever title or player
+    // was last viewed — so clear it here for any other navigation.
+    if(name!=='title'&&name!=='player'&&window.location.hash){
       history.replaceState(null,'',window.location.pathname+window.location.search);
     }
     if(restoreScroll&&S.scrollPositions[name]!==undefined){
@@ -1128,6 +1128,7 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
 
   S.playerItem=item;S.playerType=type;S.playerSeason=season;S.playerEp=ep;
   addHist({...item,media_type:type});
+  setHash(type==='tv'?`/watch/tv/${item.id}/${season}/${ep}`:`/watch/movie/${item.id}`);
   goTo('player');
 
   document.getElementById('below-title').textContent=ttl(item);
@@ -1486,6 +1487,14 @@ async function routeFromHash(hashOverride){
   if(!section)return;
   if(section==='title'&&typeOrId&&id){
     try{const data=await api(`/${typeOrId}/${id}`);if(data){data.media_type=typeOrId;setTimeout(()=>openTitlePage(data),400);}}catch(_){}
+    return;
+  }
+  if(section==='watch'&&typeOrId&&id){
+    const season=parts[3]?parseInt(parts[3]):1,ep=parts[4]?parseInt(parts[4]):1;
+    try{
+      const data=await api(`/${typeOrId}/${id}`);
+      if(data){data.media_type=typeOrId;setTimeout(()=>openPlayer(data,typeOrId,season,ep),400);}
+    }catch(_){}
     return;
   }
   if((section==='movie'||section==='tv')&&typeOrId&&!isNaN(typeOrId)){
