@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════
-   Watchy. — style.css v13
-   Modern · Cinematic · Premium micro-interactions
+   Watchy. — style.css v14
+   Classic · Luxe · Elegant — a refined pass over the
+   existing dark + gold + serif identity, not a rebuild.
    ═══════════════════════════════════════════════ */
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Outfit:wght@300;400;500;600&display=swap');
 
@@ -8,28 +9,52 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#09090B;
-  --surface:rgba(17,17,19,.92);
-  --surface2:#18181B;
-  --card:#1C1C1F;
-  --card-h:#26262A;
-  --border:rgba(255,255,255,.07);
-  --border2:rgba(255,255,255,.13);
+  --surface:rgba(18,16,14,.92);
+  --surface2:#19171A;
+  --card:#1D1B1D;
+  --card-h:#282422;
+  --border:rgba(247,240,227,.06);
+  --border2:rgba(247,240,227,.12);
   --text:#F2F1EC;
   --text2:#A1A1AA;
   --text3:#52525B;
+
+  /* Gold, as a tonal scale rather than one flat value — quiet accents,
+     primary actions, and emphasis/highlights each get their own step. */
+  --gold-muted:#9C8A63;
   --gold:#C9A96E;
-  --gold-dim:rgba(201,169,110,.12);
   --gold-light:#D4B483;
-  --green:#22C55E;
+  --gold-deep:#8A7248;
+  --gold-dim:rgba(201,169,110,.12);
+
+  /* Desaturated, editorial tones for score badges — same red/amber/green
+     logic people already read at a glance, but muted like aged print
+     rather than a bright stoplight, so it doesn't fight the rest of the
+     palette on every single card. */
+  --score-good:#8FD474;
+  --score-good-bg:rgba(13,20,9,.88);
+  --score-good-bd:rgba(143,212,116,.45);
+  --score-mid:#EFC168;
+  --score-mid-bg:rgba(26,19,6,.88);
+  --score-mid-bd:rgba(239,193,104,.45);
+  --score-low:#E2795F;
+  --score-low-bg:rgba(28,12,8,.88);
+  --score-low-bd:rgba(226,121,95,.45);
+
   --r:14px;--r-lg:20px;--r-sm:8px;
   --nav-h:58px;
   --ease:cubic-bezier(.16,1,.3,1);
   --spring:cubic-bezier(.34,1.56,.64,1);
-  --shadow:0 4px 24px rgba(0,0,0,.4);
-  --shadow-lg:0 12px 48px rgba(0,0,0,.6);
+
+  /* Shadows tinted warm-black rather than flat rgba(0,0,0) — light falling
+     on material instead of a generic UI drop-shadow. */
+  --shadow:0 4px 24px rgba(12,9,5,.45);
+  --shadow-lg:0 12px 48px rgba(12,9,5,.65);
+
   --font-s:'Outfit',system-ui,sans-serif;
   --font-d:'Cormorant Garamond',Georgia,serif;
 }
+
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{
   background:var(--bg);color:var(--text);
@@ -65,16 +90,16 @@ select{appearance:none;-webkit-appearance:none}
 /* ════════════════════════════════
    PAGE TRANSITIONS
 ════════════════════════════════ */
-.page{display:none;animation:pgIn .32s var(--ease) both}
+.page{display:none;animation:pgIn .35s var(--ease) both}
 .page.active{display:block}
-@keyframes pgIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes pgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 /* Exit motion — display:none can't be animated, so a page leaving still
    needs a brief moment with .page-leaving applied (and .active removed but
    display still overridden to block) before it's actually torn down, or it
    would just vanish with no exit feel at all. */
-.page.page-leaving{display:block;animation:pgOut .18s var(--ease) both}
-@keyframes pgOut{to{opacity:0;transform:translateY(-8px) scale(.98)}}
+.page.page-leaving{display:block;animation:pgOut .16s var(--ease) both}
+@keyframes pgOut{to{opacity:0;transform:translateY(-8px)}}
 
 /* Title page gets a more cinematic reveal — fade + gentle scale + light blur,
    like a shot pulling into focus, rather than the generic page slide-up. */
@@ -181,11 +206,22 @@ select{appearance:none;-webkit-appearance:none}
   display:grid;grid-template-columns:auto 1fr auto;align-items:center;
   padding:0 28px;gap:20px;
   background:linear-gradient(to bottom,rgba(9,9,11,.75) 0%,rgba(9,9,11,.4) 55%,transparent 100%);
-  transition:background .3s,backdrop-filter .3s,border-color .3s;
+  transition:background .3s;
 }
-.nav.scrolled{
+/* The scrolled state's blurred backing lives on its own layer, faded in via
+   opacity rather than by growing the blur radius on the nav itself.
+   Interpolating backdrop-filter's blur amount is a known Chromium/WebKit
+   bug that shows a bright seam at the element's edge mid-transition — an
+   opacity fade doesn't have that problem, and at opacity:0 the blur has no
+   visible effect at all, so the nav still looks perfectly crisp at rest. */
+.nav::before{
+  content:'';position:absolute;inset:0;z-index:-1;
   background:rgba(9,9,11,.88);
   backdrop-filter:blur(24px) saturate(1.6);
+  opacity:0;transition:opacity .3s;
+}
+.nav.scrolled::before{opacity:1}
+.nav.scrolled{
   border-bottom:1px solid var(--border);
 }
 .nav.hidden{transform:translateY(-100%)}
@@ -385,7 +421,7 @@ select{appearance:none;-webkit-appearance:none}
 .hero-eyebrow{
   display:flex;align-items:center;gap:8px;
   font-size:11px;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--text3);margin-bottom:10px;
+  color:var(--gold-muted);margin-bottom:10px;
   animation:heroTextIn .6s var(--ease) .1s both;
 }
 .hero-pulse{
@@ -442,7 +478,7 @@ select{appearance:none;-webkit-appearance:none}
 .mood-bar::-webkit-scrollbar{display:none}
 .mood-label{
   font-size:11px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--text3);flex-shrink:0;font-family:var(--font-s);
+  color:var(--gold-muted);flex-shrink:0;font-family:var(--font-s);
 }
 .mood-chip{
   flex-shrink:0;padding:6px 14px;border-radius:20px;
@@ -510,8 +546,8 @@ select{appearance:none;-webkit-appearance:none}
 }
 .rail .card{max-width:160px}
 @media(hover:hover){
-  .card:hover{transform:translateY(-6px) scale(1.035)}
-  .card:hover .card-img-w{box-shadow:0 20px 40px -8px rgba(0,0,0,.55)}
+  .card:hover{transform:translateY(-5px) scale(1.025)}
+  .card:hover .card-img-w{box-shadow:0 18px 36px -8px rgba(12,9,5,.55);border-color:var(--border2)}
 }
 .card:active{transform:scale(.97)}
 .card:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:var(--r-lg)}
@@ -522,17 +558,17 @@ select{appearance:none;-webkit-appearance:none}
 }
 .ripple-el{
   position:absolute;border-radius:50%;
-  background:rgba(255,255,255,.28);
+  background:rgba(255,255,255,.25);
   transform:scale(0);
-  animation:rippleAnim .55s ease-out;
+  animation:rippleAnim .5s ease-out;
   pointer-events:none;
 }
 @keyframes rippleAnim{to{transform:scale(1);opacity:0}}
 .card-img-w{
   position:relative;border-radius:var(--r-lg);overflow:hidden;
-  background:var(--card);
+  background:var(--card);border:1px solid var(--border);
   aspect-ratio:2/3;perspective:400px;
-  transition:box-shadow .3s var(--ease);
+  transition:box-shadow .3s var(--ease),border-color .3s var(--ease);
 }
 .card-img-w.loaded .card-img{opacity:1}
 .card-img{
@@ -577,7 +613,7 @@ select{appearance:none;-webkit-appearance:none}
 @keyframes cardEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 /* Scroll-reveal for sections (home rails + title page sections) */
-.reveal-el{opacity:0;transform:translateY(24px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.reveal-el{opacity:0;transform:translateY(20px);transition:opacity .5s var(--ease),transform .5s var(--ease)}
 .reveal-el.reveal-in{opacity:1;transform:translateY(0)}
 
 /* ════════════════════════════════
@@ -615,9 +651,9 @@ select{appearance:none;-webkit-appearance:none}
   font-family:var(--font-s);backdrop-filter:blur(6px);
   border:1px solid transparent;
 }
-.card-score.fresh{background:rgba(34,197,94,.18);border-color:rgba(34,197,94,.35);color:#4ade80}
-.card-score.mixed{background:rgba(234,179,8,.18);border-color:rgba(234,179,8,.35);color:#facc15}
-.card-score.rotten{background:rgba(239,68,68,.18);border-color:rgba(239,68,68,.35);color:#f87171}
+.card-score.fresh{background:var(--score-good-bg);border-color:var(--score-good-bd);color:var(--score-good)}
+.card-score.mixed{background:var(--score-mid-bg);border-color:var(--score-mid-bd);color:var(--score-mid)}
+.card-score.rotten{background:var(--score-low-bg);border-color:var(--score-low-bd);color:var(--score-low)}
 
 /* Rank badge */
 .rank-badge{
@@ -638,10 +674,26 @@ select{appearance:none;-webkit-appearance:none}
 
 /* Progress bar */
 .card-prog-bar{
-  position:absolute;bottom:0;left:0;right:0;height:3px;
-  background:rgba(255,255,255,.1);z-index:3;
+  position:absolute;left:8px;right:8px;bottom:5px;height:4px;z-index:3;
+  border-radius:20px;overflow:hidden;
+  background:rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.35);
 }
-.card-prog-fill{height:100%;background:var(--gold);border-radius:0 0 var(--r-lg) var(--r-lg)}
+.card-prog-fill{
+  height:100%;border-radius:20px;
+  background:linear-gradient(90deg,var(--gold-deep),var(--gold-light));
+  box-shadow:0 0 6px rgba(201,169,110,.55);
+  transition:width .3s var(--ease);
+}
+/* Soft scrim behind the progress area so the bar (and the Series pill
+   sitting just above it) stay legible against any poster, bright or dark —
+   the same problem the score badges had before that pass. */
+.card-prog-scrim{
+  position:absolute;left:0;right:0;bottom:0;height:52px;z-index:2;
+  background:linear-gradient(to top,rgba(9,9,11,.82) 0%,transparent 100%);
+  border-radius:0 0 var(--r-lg) var(--r-lg);
+  pointer-events:none;
+}
 
 /* Hover overlay — subtle dark scrim + centered play button, no trailer */
 .card-ov{
@@ -671,7 +723,7 @@ select{appearance:none;-webkit-appearance:none}
   font-size:9px;letter-spacing:.1em;text-transform:uppercase;
   color:rgba(242,241,236,.85);font-weight:500;
   background:rgba(9,9,11,.65);backdrop-filter:blur(4px);
-  padding:4px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.1);
+  padding:4px 8px;border-radius:20px;border:1px solid var(--border2);
 }
 
 /* Fav button */
@@ -891,7 +943,7 @@ select{appearance:none;-webkit-appearance:none}
   position:relative;overflow:hidden;
   margin:0 60px 44px;border-radius:28px;
   background:var(--card);
-  border:1px solid rgba(255,255,255,.07);
+  border:1px solid var(--border);
   box-shadow:0 24px 64px rgba(0,0,0,.45);
 }
 .tp-hero-card-bg{position:absolute;inset:0;overflow:hidden;pointer-events:none}
@@ -935,7 +987,7 @@ select{appearance:none;-webkit-appearance:none}
   border-radius:var(--r-lg);overflow:hidden;
   background:var(--card);aspect-ratio:2/3;
   box-shadow:0 24px 64px rgba(0,0,0,.6);
-  border:1px solid rgba(255,255,255,.07);
+  border:1px solid var(--border);
 }
 .tp-poster-img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .4s ease}
 .tp-poster-img.loaded{opacity:1}
@@ -982,7 +1034,7 @@ select{appearance:none;-webkit-appearance:none}
 .tp-icon-btn{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   width:44px;height:44px;padding:0;border-radius:50%;
-  border:1px solid rgba(255,255,255,.18);
+  border:1px solid rgba(247,240,227,.16);
   background:rgba(255,255,255,.06);backdrop-filter:blur(8px);
   color:var(--text2);
   transition:border-color .18s,background .18s,color .18s;
@@ -1027,16 +1079,16 @@ select{appearance:none;-webkit-appearance:none}
   background:#F2F1EC;color:#0A0A0C;
   font-weight:600;font-size:12.5px;letter-spacing:.02em;white-space:nowrap;
   transition:opacity .18s,transform .18s,box-shadow .18s,background .18s;
-  box-shadow:0 4px 20px rgba(0,0,0,.25);
+  box-shadow:0 4px 20px rgba(12,9,5,.3);
 }
 .btn-primary svg{flex-shrink:0;width:14px;height:14px}
-.btn-primary:hover{background:#fff;box-shadow:0 6px 28px rgba(0,0,0,.35)}
+.btn-primary:hover{background:#FAF7F0;box-shadow:0 6px 28px rgba(12,9,5,.4)}
 .btn-primary:active{transform:scale(.97)}
 .btn-primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
 .btn-ghost{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   padding:9px 18px;border-radius:var(--r);white-space:nowrap;
-  border:1px solid rgba(255,255,255,.18);
+  border:1px solid rgba(247,240,227,.16);
   background:rgba(255,255,255,.06);backdrop-filter:blur(8px);
   color:var(--text);font-size:12.5px;
   transition:border-color .18s,background .18s;
@@ -1051,9 +1103,9 @@ select{appearance:none;-webkit-appearance:none}
   font-size:11px;font-weight:600;letter-spacing:.04em;
   font-family:var(--font-s);
 }
-.score-fresh{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
-.score-mixed{background:rgba(234,179,8,.15);color:#facc15;border:1px solid rgba(234,179,8,.3)}
-.score-rotten{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.score-fresh{background:var(--score-good-bg);color:var(--score-good);border:1px solid var(--score-good-bd)}
+.score-mixed{background:var(--score-mid-bg);color:var(--score-mid);border:1px solid var(--score-mid-bd)}
+.score-rotten{background:var(--score-low-bg);color:var(--score-low);border:1px solid var(--score-low-bd)}
 
 /* ════════════════════════════════
    CAST
@@ -1146,7 +1198,7 @@ select{appearance:none;-webkit-appearance:none}
 .person-header{display:flex;gap:28px;align-items:flex-start;margin-bottom:36px}
 .person-img{width:120px;height:120px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid var(--border2)}
 .person-info{flex:1;min-width:0}
-.person-known{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.person-known{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-muted);margin-bottom:6px}
 .person-name{font-family:var(--font-d);font-size:32px;font-weight:300;color:var(--text);margin-bottom:12px}
 .person-bio{font-size:14px;color:var(--text2);line-height:1.7}
 
@@ -1176,7 +1228,7 @@ select{appearance:none;-webkit-appearance:none}
 }
 .src-toggle-btn:hover{border-color:rgba(201,169,110,.4);color:var(--gold)}
 .src-active-dot{
-  width:6px;height:6px;border-radius:50%;background:var(--green);
+  width:6px;height:6px;border-radius:50%;background:var(--score-good);
   display:inline-block;flex-shrink:0;
 }
 .player-back-btn{
@@ -1240,7 +1292,7 @@ select{appearance:none;-webkit-appearance:none}
 }
 .srv-active-ind{
   position:absolute;top:6px;right:6px;
-  width:6px;height:6px;border-radius:50%;background:var(--green);
+  width:6px;height:6px;border-radius:50%;background:var(--score-good);
 }
 
 /* Embed wrap */
@@ -1418,13 +1470,36 @@ select{appearance:none;-webkit-appearance:none}
    FOOTER
 ════════════════════════════════ */
 .site-footer{
-  padding:32px 60px 40px;border-top:1px solid var(--border);
-  display:flex;align-items:center;gap:10px;
+  position:relative;overflow:hidden;
+  padding:56px 60px 48px;border-top:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  text-align:center;
 }
-.footer-brand{font-family:var(--font-d);font-size:18px;font-weight:300;color:var(--text2)}
-.footer-sep{color:var(--border2)}
-.footer-credit{font-size:13px;color:var(--text3);transition:color .18s}
+.site-footer::before{
+  content:'';position:absolute;top:0;left:50%;transform:translate(-50%,-50%);
+  width:280px;height:140px;pointer-events:none;
+  background:radial-gradient(ellipse at center,rgba(201,169,110,.07) 0%,transparent 70%);
+}
+.footer-brand{
+  position:relative;font-family:var(--font-d);font-size:19px;font-weight:300;
+  color:var(--text2);letter-spacing:.01em;
+}
+.footer-sep{
+  position:relative;display:block;width:24px;height:1px;
+  background:var(--border2);font-size:0;overflow:hidden;
+}
+.footer-credit{
+  position:relative;font-size:12px;color:var(--text3);
+  letter-spacing:.06em;
+  transition:color .18s;
+}
+.footer-credit::after{
+  content:'';position:absolute;left:0;right:0;bottom:-3px;height:1px;
+  background:var(--gold);transform:scaleX(0);transform-origin:center;
+  transition:transform .25s var(--ease);
+}
 .footer-credit:hover{color:var(--gold)}
+.footer-credit:hover::after{transform:scaleX(1)}
 
 /* ════════════════════════════════
    TOAST

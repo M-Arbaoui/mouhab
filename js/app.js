@@ -93,6 +93,14 @@ function getLastEp(id){
   const best=keys.reduce((b,k)=>S.prog[k]>S.prog[b]?k:b,keys[0]);
   const p=best.split('_');return{season:parseInt(p[2]),episode:parseInt(p[3])};
 }
+// The progress that actually matters for an item: for a movie that's its
+// own key, but for a TV show it's whichever episode was last watched, not
+// blindly Season 1 Episode 1 (which is wrong for anyone past the pilot).
+function itemProgress(id,type){
+  if(type==='movie')return getProg(id,'movie');
+  const last=getLastEp(id);
+  return last?getProg(id,'tv',last.season,last.episode):0;
+}
 const isFav=id=>S.favs.some(f=>f.id===id);
 function toggleFav(item){
   const i=S.favs.findIndex(f=>f.id===item.id);
@@ -450,7 +458,7 @@ function setSearchFilter(f){
 function makeCard(item,opts={}){
   const type=mtyp(item),t=ttl(item),y=yr(item);
   const src=imgP(item.poster_path),fav=isFav(item.id);
-  const pct=opts.showProgress?getProg(item.id,type):0;
+  const pct=opts.showProgress?itemProgress(item.id,type):0;
   const score=item.vote_average?Math.round(item.vote_average*10):0;
   const releaseDate=item.release_date||item.first_air_date;
   const isNew=releaseDate&&!opts.hideNewBadge&&(Date.now()-new Date(releaseDate).getTime())<1000*60*60*24*21&&new Date(releaseDate).getTime()<=Date.now();
@@ -495,6 +503,8 @@ function makeCard(item,opts={}){
 
   // Progress bar at bottom of image
   if(opts.showProgress&&pct>0){
+    const scrim=document.createElement('div');scrim.className='card-prog-scrim';
+    imgW.appendChild(scrim);
     const pb=document.createElement('div');pb.className='card-prog-bar';
     pb.innerHTML=`<div class="card-prog-fill" style="width:${pct}%"></div>`;
     imgW.appendChild(pb);
@@ -681,7 +691,7 @@ async function renderHero(item){
 
   // Watch Now → Resume, mirroring the title page's logic
   const type=mtyp(item);
-  const prog=type==='tv'?(getLastEp(item.id)?getProg(item.id,'tv',getLastEp(item.id).season,getLastEp(item.id).episode):0):getProg(item.id,'movie');
+  const prog=itemProgress(item.id,type);
   const playBtn=document.getElementById('hero-play-btn');
   if(playBtn){
     playBtn.innerHTML=prog>5
@@ -767,9 +777,17 @@ async function loadHome(){
 function refreshContRow(){
   const sec=document.getElementById('continue-sec'),rail=document.getElementById('rail-continue');
   if(!sec||!rail)return;
-  if(!S.hist.length){sec.style.display='none';return;}
+  // Only items with real, unfinished progress belong here — something you
+  // never actually pressed play on (0%) has nothing to "continue", and
+  // something you've basically finished (92%+) doesn't either.
+  const inProgress=S.hist.filter(item=>{
+    const type=item.media_type||mtyp(item);
+    const pct=itemProgress(item.id,type);
+    return pct>=3&&pct<92;
+  });
+  if(!inProgress.length){sec.style.display='none';return;}
   sec.style.display='block';rail.innerHTML='';
-  S.hist.slice(0,12).forEach(item=>{
+  inProgress.slice(0,12).forEach(item=>{
     const wrap=document.createElement('div');wrap.className='cont-item';
     wrap.style.cssText='position:relative;flex:0 0 152px';
     const card=makeCard(item,{showProgress:true,hideScore:true,showPlayIcon:true});wrap.appendChild(card);
@@ -785,7 +803,7 @@ function refreshContRow(){
         Object.keys(S.prog).filter(k=>k.startsWith(type==='movie'?`m_${item.id}`:`tv_${item.id}_`)).forEach(k=>delete S.prog[k]);
         save();
         wrap.remove();
-        if(!S.hist.length)sec.style.display='none';
+        if(!rail.children.length)sec.style.display='none';
       };
       wrap.addEventListener('animationend',finish,{once:true});
       setTimeout(finish,500); // safety net in case animationend never fires
@@ -862,7 +880,7 @@ async function openTitlePage(item){
 
   // Watch/fav
   const watchBtn=document.getElementById('tp-watch-btn');
-  const prog=getProg(item.id,type);
+  const prog=itemProgress(item.id,type);
   watchBtn.innerHTML=prog>5
     ?`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Resume (${prog}%)`
     :`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Watch Now`;
