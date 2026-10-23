@@ -247,7 +247,12 @@
 
 <!-- MY LIST -->
 <div id="page-mylist" class="page">
-  <div class="aux-header"><h1 class="aux-title">My List</h1><p class="aux-sub">Everything you've saved</p></div>
+  <div class="aux-header">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <div><h1 class="aux-title">My List</h1><p class="aux-sub">Everything you've saved</p></div>
+      <button class="section-clear-btn" id="fav-clear-btn" type="button" hidden>Clear all</button>
+    </div>
+  </div>
   <div id="fav-grid" class="grid-page"></div>
 </div>
 
@@ -496,6 +501,11 @@
     </div>
     <p class="src-panel-hint">Tap any source to switch instantly. If one fails, try the next.</p>
     <div class="src-panel-tabs" id="server-switcher"></div>
+    <div class="src-sub" id="src-sub">
+      <span class="src-sub-label">Subtitles</span>
+      <div class="src-sub-opts" role="group" aria-label="Preferred subtitle language"></div>
+      <p class="src-sub-note" id="src-sub-note"></p>
+    </div>
   </div>
 
   <div class="player-embed-wrap" id="player-embed-wrap">
@@ -570,7 +580,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="js/app.min.js"></script>
+<script src="js/app.js"></script>
 <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 </body>
 </html>

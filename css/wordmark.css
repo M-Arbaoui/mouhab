@@ -1,0 +1,67 @@
+/* Quiet, typographic treatment for the navbar wordmark. */
+.nav-wordmark {
+  position: relative;
+  color: var(--text);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  transform: none;
+  transition: color 300ms ease-out;
+}
+
+.nav-wordmark .dot {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+  color: var(--gold-muted);
+  -webkit-text-fill-color: currentColor;
+  text-shadow: none;
+  transform: none;
+  transition: color 300ms ease-out;
+}
+
+.nav-wordmark .dot::after {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: 1.7em;
+  height: 1.7em;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(212, 180, 131, 0.28) 0%, rgba(212, 180, 131, 0.12) 32%, transparent 72%);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 300ms ease-out;
+}
+
+.nav-logo:hover .nav-wordmark,
+.nav-logo:focus-visible .nav-wordmark {
+  color: #fffdf8;
+  background: none;
+  transform: none;
+}
+
+.nav-logo:hover .nav-wordmark .dot,
+.nav-logo:focus-visible .nav-wordmark .dot {
+  color: var(--gold-light);
+  text-shadow: none;
+  transform: none;
+}
+
+.nav-logo:hover .nav-wordmark .dot::after,
+.nav-logo:focus-visible .nav-wordmark .dot::after {
+  opacity: 1;
+}
+
+.nav-logo:active .nav-wordmark {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-wordmark,
+  .nav-wordmark .dot,
+  .nav-wordmark .dot::after {
+    transition: none;
+  }
+}

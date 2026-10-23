@@ -228,38 +228,55 @@ select{appearance:none;-webkit-appearance:none}
   border-bottom:1px solid var(--border);
 }
 .nav.hidden{transform:translateY(-100%)}
+/* Cursor spotlight: a soft gold light follows the pointer across the
+   wordmark, with a faint halo behind it. --spot is a registered number so
+   the light fades in and out smoothly instead of popping; --mx / --my are
+   set from JS (initLogoSpotlight). Everything is eased, nothing bounces.
+   The transition uses longhand properties on purpose: the CSS minifier
+   doesn't recognise a custom property inside the transition shorthand and
+   silently drops it, which would make the light pop in production. */
+@property --spot{syntax:'<number>';inherits:true;initial-value:0}
 .nav-logo{
+  position:relative;
+  --mx:50%;--my:50%;--spot:0;
   display:flex;align-items:center;gap:0;
   cursor:pointer;
+  transition-property:--spot;transition-duration:.45s;transition-timing-function:ease;
+}
+.nav-logo::before{
+  /* The box must be larger than the glow's radius (64px) on every side,
+     otherwise the glow is still visible where the box ends and shows up as a
+     hard-edged rectangle. The offsets below (+72/+64) match the insets. */
+  content:'';position:absolute;inset:-64px -72px;z-index:-1;pointer-events:none;
+  background:radial-gradient(circle 64px at calc(var(--mx) + 72px) calc(var(--my) + 64px),rgba(201,169,110,calc(var(--spot) * .14)) 0%,transparent 100%);
 }
 .nav-wordmark{
   font-family:var(--font-d);font-size:22px;font-weight:300;
   color:var(--text);letter-spacing:-.01em;
   user-select:none;
-  /* Light-sweep: a soft gold highlight band sits off to the left at rest
-     and glides across the letters on hover. The text is painted by the
-     gradient, so the colour at rest is still plain cream. The "breath" is a
-     transform (not letter-spacing) so it never shifts the nav layout. */
-  background:linear-gradient(100deg,var(--text) 0%,var(--text) 40%,var(--gold-light) 50%,var(--text) 60%,var(--text) 100%);
-  background-size:260% 100%;background-position:100% 0;
+  /* The letters are painted by the gradients (background-clip:text): plain
+     cream underneath, the spotlight layered on top. At rest --spot is 0, so
+     it is just cream. */
+  background:
+    radial-gradient(circle 46px at var(--mx) var(--my),rgba(246,222,170,var(--spot)) 0%,rgba(212,180,131,calc(var(--spot) * .8)) 40%,transparent 100%),
+    linear-gradient(var(--text),var(--text));
   -webkit-background-clip:text;background-clip:text;
   -webkit-text-fill-color:transparent;
   transform-origin:left center;
-  transition:background-position .9s var(--ease),transform .5s var(--ease);
+  transition:transform .5s var(--ease);
 }
+/* The dot must stay a plain inline span with no transform, inline-block or
+   shadow: inside a background-clip:text parent, any of those makes Chrome
+   paint a stray copy of the dot at the start of the line. It warms by
+   colour only. */
 .nav-wordmark .dot{
-  display:inline-block;
   -webkit-text-fill-color:var(--gold);
-  transition:transform .5s var(--ease),text-shadow .5s var(--ease);
+  transition:-webkit-text-fill-color .5s var(--ease);
 }
 @media(hover:hover){
-  .nav-logo:hover .nav-wordmark{
-    background-position:0% 0;transform:translateY(-1px) scale(1.04);
-  }
-  .nav-logo:hover .nav-wordmark .dot{
-    transform:translateY(-2px) scale(1.25);
-    text-shadow:0 0 12px rgba(201,169,110,.65);
-  }
+  .nav-logo:hover{--spot:1}
+  .nav-logo:hover .nav-wordmark{transform:translateY(-1px) scale(1.03)}
+  .nav-logo:hover .nav-wordmark .dot{-webkit-text-fill-color:var(--gold-light)}
 }
 .nav-logo:active .nav-wordmark{transform:translateY(0) scale(.98)}
 .nav-links{
@@ -286,6 +303,7 @@ select{appearance:none;-webkit-appearance:none}
 .nav-underline.ready{
   transition:transform .35s var(--ease),opacity .2s ease;
 }
+.nav-underline.ready.snap{transition:opacity .2s ease}
 .nav-underline.visible{opacity:1}
 .nav-right{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .nav-search-btn{
@@ -1330,26 +1348,51 @@ select{appearance:none;-webkit-appearance:none}
   padding:12px;max-height:min(360px,50vh);overflow-y:auto;
 }
 .server-opt{
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  padding:10px 8px;border-radius:var(--r);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-height:58px;padding:14px 8px 10px;border-radius:var(--r);
   background:var(--card);border:1px solid var(--border);
   font-size:12px;color:var(--text2);
   transition:border-color .18s,color .18s,background .18s;
   position:relative;cursor:pointer;
 }
 .server-opt:hover{border-color:var(--border2);background:var(--card-h)}
+/* One active treatment only: gold border + tint. */
 .server-opt.active{
   border-color:rgba(201,169,110,.5);background:var(--gold-dim);color:var(--gold);
 }
+.server-opt:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .srv-name{font-size:12px;font-weight:500;text-align:center}
+/* The tag line is always reserved, so every card is the same height whether
+   or not it carries a label. */
 .srv-tag{
+  display:block;min-height:11px;line-height:11px;
   font-size:9px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--gold);opacity:.8;
 }
-.srv-active-ind{
-  position:absolute;top:6px;right:6px;
-  width:6px;height:6px;border-radius:50%;background:var(--score-good);
+/* Shown on the one suggested source only. */
+.srv-rec{
+  position:absolute;top:5px;right:7px;
+  font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);
 }
+.server-opt.active .srv-rec{color:var(--gold)}
+
+/* Subtitle language preference */
+.src-sub{padding:4px 12px 12px;border-top:1px solid var(--border)}
+.src-sub-label{
+  display:block;margin-top:10px;
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-muted);
+}
+.src-sub-opts{display:flex;gap:6px;margin:8px 0 6px}
+.src-sub-btn{
+  flex:1;padding:7px 8px;border-radius:var(--r-sm);
+  background:var(--card);border:1px solid var(--border);
+  font-size:12px;color:var(--text2);
+  transition:border-color .18s,color .18s,background .18s;
+}
+.src-sub-btn:hover{border-color:var(--border2)}
+.src-sub-btn.active{border-color:rgba(201,169,110,.5);background:var(--gold-dim);color:var(--gold)}
+.src-sub-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.src-sub-note{font-size:11px;line-height:1.5;color:var(--text3)}
 
 /* Embed wrap */
 .player-embed-wrap{

@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════
-   Watchy. — Service Worker v3
+   Watchy. — Service Worker v5
    Cache-first: app shell + images
    Network-first: TMDB API
    Never cache: stream embeds
    ═══════════════════════════════════════════════ */
-const CACHE     = 'watchy-shell-v3';
-const API_CACHE = 'watchy-api-v3';
-const IMG_CACHE = 'watchy-img-v3';
+const CACHE     = 'watchy-shell-v5';
+const API_CACHE = 'watchy-api-v5';
+const IMG_CACHE = 'watchy-img-v5';
 
 const SHELL = [
   './',
   './index.html',
-  './css/style.css',
-  './js/app.js',
+  './css/style.min.css',
+  './js/app.min.js',
   './manifest.json',
   './og-image.png',
   './icon-192.png',
@@ -23,6 +23,7 @@ const EMBED_HOSTS = new Set([
   'vidsrc.to','vidsrc.xyz','2embed.cc',
   'vidking.net','ezvidapi.com','streamdb.dev',
   'videasy.net','vidnest.online','p-stream.co',
+  'vidrift.net','ani.pm',
   'youtube.com','youtube-nocookie.com','youtu.be',
 ]);
 
@@ -70,9 +71,12 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App shell — cache-first
-  if (url.hostname === self.location.hostname) {
-    e.respondWith(cacheFirst(e.request, CACHE));
+  // App shell — network-first, cache as the offline fallback. This was
+  // cache-first with a fixed cache name, which never rechecked the network:
+  // anyone who had already loaded the site kept getting their old JS and CSS
+  // no matter how many updates shipped.
+  if (url.hostname === self.location.hostname && e.request.method === 'GET') {
+    e.respondWith(shellNetworkFirst(e.request));
   }
 });
 
@@ -104,5 +108,21 @@ async function networkFirst(req, cacheName, timeoutMs = 8000) {
       new Response('{"results":[]}', {
         headers: { 'Content-Type': 'application/json' }
       });
+  }
+}
+
+async function shellNetworkFirst(req) {
+  const cache = await caches.open(CACHE);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(req, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) cache.put(req, res.clone());
+    return res;
+  } catch(_) {
+    clearTimeout(timer);
+    return (await cache.match(req)) ||
+      new Response('', { status: 503, statusText: 'Offline' });
   }
 }

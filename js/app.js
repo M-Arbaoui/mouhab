@@ -54,14 +54,22 @@ function lsGetJSON(key,fallback){
 function lsSetJSON(key,value){
   try{localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){return false;}
 }
+const loadArray=key=>{
+  const value=lsGetJSON(key,[]);
+  return Array.isArray(value)?value.filter(item=>item&&typeof item==='object'&&item.id!=null):[];
+};
+const loadObject=key=>{
+  const value=lsGetJSON(key,{});
+  return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+};
 
 const S={
   page:'home',lastPage:'home',
   scrollPositions:{},
   heroItems:[],heroIdx:0,heroTimer:null,
-  favs:lsGetJSON('wt_favs',[]),
-  hist:lsGetJSON('wt_hist',[]),
-  prog:lsGetJSON('wt_prog',{}),
+  favs:loadArray('wt_favs'),
+  hist:loadArray('wt_hist'),
+  prog:loadObject('wt_prog'),
   moviesLoaded:false,seriesLoaded:false,
   moviesPage:1,seriesPage:1,moviesLoading:false,seriesLoading:false,
   moviesDone:false,seriesDone:false,
@@ -102,12 +110,14 @@ function itemProgress(id,type){
   const last=getLastEp(id);
   return last?getProg(id,'tv',last.season,last.episode):0;
 }
-const isFav=id=>S.favs.some(f=>f.id===id);
+const favKey=item=>`${mtyp(item)}:${String(item.id)}`;
+const isFav=item=>S.favs.some(f=>favKey(f)===favKey(item));
 function toggleFav(item){
-  const i=S.favs.findIndex(f=>f.id===item.id);
+  const key=favKey(item);
+  const i=S.favs.findIndex(f=>favKey(f)===key);
   if(i>-1){S.favs.splice(i,1);showToast('Removed from My List');}
   else{S.favs.unshift({...item,_ts:Date.now()});showToast('Added to My List');}
-  save();refreshFavPage();return isFav(item.id);
+  save();refreshFavPage();return isFav(item);
 }
 function addHist(item){
   const i=S.hist.findIndex(h=>h.id===item.id);
@@ -302,14 +312,248 @@ const SERVERS=[
     movie:id=>`https://vidapi.ru/embed/movie/${id}`,
     tv:(id,s,e)=>`https://vidapi.ru/embed/tv/${id}/${s}/${e}`,
   },
+  // ── Newly integrated (see PROVIDER_CONFIG below for order and capabilities) ──
+  {
+    id:'vidrift', label:'VidRift', tag:'NEW',
+    // Plain builders kept for parity with the other sources; resolve() below
+    // is what actually loads, because it adds Watchy's branding parameters.
+    movie:id=>`https://embed.vidrift.net/embed/movie/${id}`,
+    tv:(id,s,e)=>`https://embed.vidrift.net/embed/tv/${id}/${s}/${e}`,
+    resolve:ctx=>vidriftUrl(ctx),
+  },
+  // ani.pm is anime-only (kinds) and needs an AniList id, which TMDB doesn't
+  // have — resolveAniPm() looks the title up first, so it returns a Promise.
+  { id:'anipm',     label:'AniPM',     tag:'NEW', kinds:['anime'], lang:'sub', resolve:ctx=>resolveAniPm(ctx) },
+  { id:'anipm_dub', label:'AniPM Dub', tag:'NEW', kinds:['anime'], lang:'dub', resolve:ctx=>resolveAniPm(ctx) },
 ];
-let _currentServer=parseInt(lsGetRaw('wt_server','0'));
-const getCurrentServer=()=>SERVERS[_currentServer]||SERVERS[0];
-function setServer(idx){
-  _currentServer=idx;lsSetRaw('wt_server',idx);
-  buildServerSwitcher();
-  if(S.playerItem)loadVidSrcWithServer(S.playerItem.id,S.playerType,S.playerSeason,S.playerEp);
+/* ══════════════════════════════════════════
+   PROVIDER REGISTRY
+   Which sources exist, their order, and what each can do. The switcher UI
+   reads from this and has no ordering of its own.
+   - Reorder a kind of title:  edit PROVIDER_CONFIG.order[kind]
+   - Hide a source everywhere: add its id to PROVIDER_CONFIG.hidden
+   - A source missing from an order list is never lost: it is appended after
+     the listed ones, so nothing becomes unreachable by omission.
+   The order is a configured starting point, NOT a benchmark result.
+   ══════════════════════════════════════════ */
+const WATCHY_ACCENT='C9A96E'; // = --gold in style.css (hex without #, as the embeds expect)
+const PROVIDER_ORDER_BASE=[
+  // Tier 1 — newly integrated
+  'vidrift',
+  // Tier 2 — preferred
+  'vidking','vidsrc_xyz','vidsrc_sbs','vidsrc_to','superembed','autoembed',
+  // Tier 3 — alternatives
+  'embedsu','vidsrc2','videasy','embed2','vidnest','vidlink','moviesapi',
+  'smashystream','vidjoy','111movies','vidrock','hexa',
+  // Added later, outside the original tiers
+  'vidora','vidvault','vidapi',
+];
+const PROVIDER_CONFIG={
+  order:{
+    movie:PROVIDER_ORDER_BASE,
+    tv:PROVIDER_ORDER_BASE,
+    // Anime: the anime-specific source sits right after Tier 1 rather than
+    // last, since it is the only one built for the job.
+    anime:['vidrift','anipm','anipm_dub',...PROVIDER_ORDER_BASE.slice(1)],
+  },
+  hidden:[],
+  // Capabilities are only recorded where they were verified from the
+  // provider's own documentation. Anything absent is "unknown", never assumed.
+  meta:{
+    vidrift:{
+      custom:'brand name, accent colour, font, loading poster, title',
+      arabic:'subtitle menu inside the player; Arabic not confirmed per title',
+      ads:true,
+    },
+    anipm:{
+      custom:'accent colour, subtitle language, playback defaults',
+      arabic:'Arabic is requested; English is shown if the episode has no Arabic track',
+      arabicRequest:true,ads:true,
+    },
+    anipm_dub:{
+      custom:'accent colour, subtitle language, playback defaults',
+      arabic:'Arabic is requested; English is shown if the episode has no Arabic track',
+      arabicRequest:true,ads:true,
+    },
+  },
+};
+const SUB_NOTE_DEFAULT='uses its own subtitle menu; Arabic not confirmed';
+const providerMeta=srv=>PROVIDER_CONFIG.meta[srv.id]||{};
+
+// Anime = Animation genre + Japanese original language. Works for list items
+// (genre_ids) and for detail responses (genres).
+function isAnimeItem(item){
+  if(!item)return false;
+  const ids=item.genre_ids||(item.genres||[]).map(g=>g.id);
+  return ids.includes(16)&&item.original_language==='ja';
 }
+const providerKind=(item,type)=>isAnimeItem(item)?'anime':(type==='movie'?'movie':'tv');
+
+function providersFor(kind){
+  const order=PROVIDER_CONFIG.order[kind]||PROVIDER_CONFIG.order.movie;
+  const seen=new Set(),out=[];
+  const add=id=>{
+    const srv=SERVERS.find(x=>x.id===id);
+    if(!srv||seen.has(id)||PROVIDER_CONFIG.hidden.includes(id))return;
+    seen.add(id);
+    if(srv.kinds&&!srv.kinds.includes(kind))return; // compatibility gate
+    out.push(srv);
+  };
+  order.forEach(add);
+  SERVERS.forEach(srv=>add(srv.id));
+  return out;
+}
+// Highest-priority eligible source. When Arabic subtitles are wanted, a
+// source that can actually request Arabic is preferred over plain order.
+function recommendedProvider(kind){
+  const list=providersFor(kind);
+  if(_subLang==='ar'){
+    const ar=list.find(srv=>providerMeta(srv).arabicRequest);
+    if(ar)return ar;
+  }
+  return list[0];
+}
+
+// The user's own picks. Only an explicit click ever sets these, so the
+// recommendation can change freely without moving anyone's preferred source.
+let _pickedGeneric=lsGetRaw('wt_provider');
+let _pickedAnime=lsGetRaw('wt_provider_anime');
+let _subLang=lsGetRaw('wt_sublang','auto'); // 'auto' | 'ar' | 'en'
+if(!_pickedGeneric){ // one-time carry-over from the old index-based preference
+  const oldIdx=lsGetRaw('wt_server');
+  const old=oldIdx!==null?SERVERS[parseInt(oldIdx)]:null;
+  if(old&&!old.kinds)_pickedGeneric=old.id;
+}
+function activeProvider(item,type){
+  const kind=providerKind(item,type),list=providersFor(kind);
+  const eligible=id=>id&&list.find(srv=>srv.id===id);
+  return (kind==='anime'&&eligible(_pickedAnime))||eligible(_pickedGeneric)||recommendedProvider(kind);
+}
+function setServer(id){
+  const srv=SERVERS.find(x=>x.id===id);if(!srv)return;
+  if(srv.kinds){_pickedAnime=id;lsSetRaw('wt_provider_anime',id);}
+  else{
+    _pickedGeneric=id;lsSetRaw('wt_provider',id);
+    _pickedAnime=null;try{localStorage.removeItem('wt_provider_anime');}catch(_){}
+  }
+  if(S.playerItem)loadVidSrcWithServer(S.playerItem.id,S.playerType,S.playerSeason,S.playerEp,id);
+}
+function setSubLang(v){
+  _subLang=v;lsSetRaw('wt_sublang',v);
+  buildServerSwitcher();
+  // Only ani.pm takes the language as a URL parameter, so only it reloads.
+  if(S.playerItem&&(S.activeSrc||'').startsWith('anipm')){
+    loadVidSrcWithServer(S.playerItem.id,S.playerType,S.playerSeason,S.playerEp,S.activeSrc);
+  }
+}
+
+/* ── VidRift (docs: vidrift.net) ──
+   Same TMDB ids as everything else here. Branding parameters used: brand,
+   brandColor, font, title, poster. brandLogo is not set: it needs a public
+   https URL for the logo and Watchy has no final domain yet. */
+function vidriftUrl({item,type,season,ep}){
+  const path=type==='movie'?`movie/${item.id}`:`tv/${item.id}/${season}/${ep}`;
+  const q=new URLSearchParams({brand:'Watchy',brandColor:WATCHY_ACCENT,font:'Outfit',title:ttl(item)});
+  if(item.backdrop_path)q.set('poster',`${TMDB_IMG}/w1280${item.backdrop_path}`);
+  return `https://embed.vidrift.net/embed/${path}?${q}`;
+}
+// Watchy has its own episode navigation and, by design, no auto-next. VidRift
+// plays the next episode on its own unless the page says it owns "up next",
+// so tell it there is nothing next. Posted a few times because the embed's
+// script may not be listening yet at the moment the iframe's load fires.
+function vidriftHandshake(iframe,ctx){
+  const w=iframe.contentWindow;if(!w)return;
+  const post=m=>{try{w.postMessage(m,'https://embed.vidrift.net');}catch(_){}};
+  if(ctx.type==='tv')[0,1500,4000].forEach(ms=>setTimeout(()=>post({type:'vidrift:nextup-info',next:null}),ms));
+  if(ctx.resumeAt>10)setTimeout(()=>post({type:'vidrift:resume',currentTime:ctx.resumeAt}),2500);
+}
+
+/* ── ani.pm (docs: ani.pm) ──
+   Embeds take an AniList id, TMDB ids don't map to it, so the title is
+   looked up through ani.pm's own REST API (open, CORS-enabled, no key). */
+const ANIPM_API='https://ani.pm/api/partner/v1';
+const _aniCache={};
+const _normTitle=t=>(t||'').toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+async function findAniListId(item,type,season){
+  const base=item.name||item.title||'';
+  const alts=[item.original_name,item.original_title].filter(Boolean);
+  const target=_normTitle(base),altNorm=alts.map(_normTitle);
+  const queries=[base,...alts];
+  if(type==='tv'&&season>1)queries.unshift(`${base} season ${season}`,`${base} ${season}`);
+  const seasonYear=type==='tv'&&season>1
+    ?Number((S.playerSeasonData?.[item.id]?.[season]?.air_date||'').slice(0,4))||null
+    :Number(yr(item))||null;
+  let best=null,bestScore=0;
+  for(const q of [...new Set(queries)].filter(x=>x&&x.length>=2)){
+    const res=await fetch(`${ANIPM_API}/titles?q=${encodeURIComponent(q)}&limit=10&adult=0`).then(r=>r.ok?r.json():null).catch(()=>null);
+    for(const r of res?.data||[]){
+      const names=[r.title,r.nativeTitle].map(_normTitle);
+      // A title must actually resemble the one we want. Type and year alone
+      // can add up to a pass, which would play the wrong show.
+      let nameScore=0;
+      if(names.some(n=>n===target||altNorm.includes(n)))nameScore=6;
+      else if(names.some(n=>n&&target&&(n.includes(target)||target.includes(n))))nameScore=3;
+      if(!nameScore)continue;
+      let score=nameScore;
+      const isMovie=r.format==='MOVIE';
+      if(type==='movie')score+=isMovie?2:-3; else score+=isMovie?-3:2;
+      const yearHit=!!(seasonYear&&r.year&&r.year===seasonYear);
+      if(seasonYear&&r.year){score+=yearHit?4:(Math.abs(r.year-seasonYear)>1?-3:0);}
+      if(type==='tv'){
+        // AniList lists each season as its own entry: "Show", "Show Season 2".
+        // An unmarked name is season 1.
+        const mk=names[0].match(/season (\d+)|(\d+)(?:st|nd|rd|th) season/);
+        const cand=mk?Number(mk[1]||mk[2]):1;
+        if(cand===season)score+=3; else if(!yearHit)score-=4;
+      }
+      if(score>bestScore){bestScore=score;best=r;}
+    }
+    if(bestScore>=10)break;
+  }
+  return bestScore>=6?best.anilistId:null;
+}
+async function resolveAniPm({item,type,season,ep,srv,resumeAt}){
+  const key=`${item.id}:${type==='tv'?season:0}`;
+  if(!(key in _aniCache))_aniCache[key]=await findAniListId(item,type,season).catch(()=>null);
+  const id=_aniCache[key];
+  if(!id)return null; // not on ani.pm — reported to the user, never guessed
+  // autonext/autoskip off: Watchy has neither by design. adult=0 keeps 18+ titles out.
+  const q=new URLSearchParams({autonext:'0',autoskip:'0',adult:'0',color:WATCHY_ACCENT});
+  if(_subLang==='ar'||_subLang==='en')q.set('subtitles',_subLang);
+  if(resumeAt>10)q.set('start',String(resumeAt));
+  return `https://ani.pm/embed/ani/${id}/${type==='movie'?1:ep}/${srv.lang}?${q}`;
+}
+
+/* ── Live playback position ──
+   VidRift and ani.pm both report the real position. Using it means Continue
+   Watching stores actual progress rather than guessing from elapsed time,
+   and lets a source switch resume where the viewer was. */
+let _livePos={key:'',t:0,d:0,lastSave:0};
+const livePosKey=()=>S.playerItem?`${S.playerItem.id}:${S.playerSeason}:${S.playerEp}`:'';
+const resumePoint=(item,season,ep)=>(_livePos.key===`${item.id}:${season}:${ep}`&&_livePos.t>10)?Math.floor(_livePos.t):0;
+window.addEventListener('message',e=>{
+  const fromVidrift=e.origin==='https://embed.vidrift.net';
+  if(!fromVidrift&&e.origin!=='https://ani.pm')return;
+  const m=e.data,it=S.playerItem;
+  if(!m||typeof m!=='object'||!it||S.page!=='player')return;
+  let t=null,d=null;
+  if(fromVidrift){
+    if(m.type==='vidrift:episode'&&S.playerType==='tv'&&String(m.tmdbId||it.id)===String(it.id)){
+      S.playerSeason=Number(m.season)||S.playerSeason;S.playerEp=Number(m.episode)||S.playerEp;
+      setHash(`/watch/tv/${it.id}/${S.playerSeason}/${S.playerEp}`);updateEpCounter();return;
+    }
+    if(m.type!=='vidrift:progress'||String(m.tmdbId)!==String(it.id))return;
+    t=m.currentTime;d=m.duration;
+  }else if(m.channel==='megacloud'&&m.event==='time'){t=m.time;d=m.duration;}
+  else if(m.type==='watching-log'){t=m.currentTime;d=m.duration;}
+  if(!(t>=0)||!(d>0))return;
+  _livePos.key=livePosKey();_livePos.t=t;_livePos.d=d;
+  const now=Date.now();
+  if(t>5&&now-_livePos.lastSave>15000){
+    _livePos.lastSave=now;
+    saveProg(it.id,S.playerType,S.playerSeason,S.playerEp,Math.round(t/d*100));
+  }
+});
 
 /* ── Routing ── */
 let _pageTransitionTimer=null;
@@ -401,13 +645,38 @@ function moveNavUnderline(){
   // place rather than snapping away or sitting under the wrong link.
   if(!active||!active.offsetWidth){ind.classList.remove('visible');return;}
   const x=active.offsetLeft+(active.offsetWidth-16)/2;
+  // Coming back from hidden (title/player/person pages): jump to the right
+  // link first, THEN fade in — otherwise it reappears at its old position
+  // and slides across, which reads as stuck under the wrong link.
+  const wasHidden=!ind.classList.contains('visible');
+  if(wasHidden)ind.classList.add('snap');
   ind.style.transform=`translateX(${x}px)`;
+  if(wasHidden){void ind.offsetWidth;requestAnimationFrame(()=>ind.classList.remove('snap'));}
   ind.classList.add('visible');
   // Enable the slide transition only after the first placement, so the very
   // first paint snaps into position instead of sweeping in from the left.
   if(!ind.classList.contains('ready')){
     requestAnimationFrame(()=>requestAnimationFrame(()=>ind.classList.add('ready')));
   }
+}
+
+/* ── Logo cursor spotlight ── */
+function initLogoSpotlight(){
+  const logo=document.getElementById('nav-logo');
+  if(!logo||!window.matchMedia('(hover:hover)').matches)return;
+  const place=e=>{
+    const r=logo.getBoundingClientRect();
+    logo.style.setProperty('--mx',`${e.clientX-r.left}px`);
+    logo.style.setProperty('--my',`${e.clientY-r.top}px`);
+  };
+  let raf=0;
+  // Place the light under the cursor immediately on entry so it fades in
+  // where you are, not from the middle of the word.
+  logo.addEventListener('pointerenter',place);
+  logo.addEventListener('pointermove',e=>{
+    if(raf)return;
+    raf=requestAnimationFrame(()=>{raf=0;place(e);});
+  });
 }
 
 /* ── Toast ── */
@@ -568,7 +837,7 @@ function setSearchFilter(f){
    ══════════════════════════════════════════ */
 function makeCard(item,opts={}){
   const type=mtyp(item),t=ttl(item),y=yr(item);
-  const src=imgP(item.poster_path),fav=isFav(item.id);
+  const src=imgP(item.poster_path),fav=isFav(item);
   const pct=opts.showProgress?itemProgress(item.id,type):0;
   const score=item.vote_average?Math.round(item.vote_average*10):0;
   const releaseDate=item.release_date||item.first_air_date;
@@ -925,6 +1194,8 @@ function refreshContRow(){
 }
 function refreshFavPage(){
   const grid=document.getElementById('fav-grid');if(!grid)return;
+  const clearBtn=document.getElementById('fav-clear-btn');
+  if(clearBtn)clearBtn.hidden=S.favs.length===0;
   if(!S.favs.length){grid.innerHTML=emptyHTML('Your list is empty.','Save something worth returning to.',EMPTY_ICON_LIST);return;}
   grid.innerHTML='';S.favs.forEach(item=>grid.appendChild(makeCard(item)));
 }
@@ -1001,7 +1272,7 @@ async function openTitlePage(item){
     favBtn.querySelector('svg').setAttribute('fill',a?'currentColor':'none');
     favBtn.title=a?'Remove from My List':'Add to My List';
   };
-  upFav(isFav(item.id));
+  upFav(isFav(item));
   favBtn.onclick=()=>{
     const now=toggleFav(item);upFav(now);
     favBtn.animate([{transform:'scale(1)'},{transform:'scale(.94)'},{transform:'scale(1)'}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
@@ -1223,7 +1494,7 @@ function renderDiscover(){
   document.getElementById('discover-counter').textContent=`${S.discoverIdx+1} / ${S.discoverItems.length}`;
   const favBtn=document.getElementById('discover-fav');
   if(favBtn){
-    const active=isFav(item.id);
+    const active=isFav(item);
     favBtn.classList.toggle('active',active);
     favBtn.innerHTML=active
       ?`<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l8.84 8.84 8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg> In My List`
@@ -1251,6 +1522,7 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
   updateCinematicLoader(20,`Loading ${ttl(item)}…`,bg);
 
   S.playerItem=item;S.playerType=type;S.playerSeason=season;S.playerEp=ep;
+  if(_livePos.key!==livePosKey())_livePos={key:'',t:0,d:0,lastSave:0};
   addHist({...item,media_type:type});
   setHash(type==='tv'?`/watch/tv/${item.id}/${season}/${ep}`:`/watch/movie/${item.id}`);
   goTo('player');
@@ -1288,44 +1560,71 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
 }
 
 
-let _srcHintTimer=null;
-function loadVidSrcWithServer(id,type,season,ep){
+let _srcHintTimer=null,_loadToken=0;
+const SRC_HINT_DEFAULT='Nothing playing? This source may be down.';
+function loadVidSrcWithServer(id,type,season,ep,forceId){
   const wrap=document.getElementById('player-embed-wrap');if(!wrap)return;
   const old=document.getElementById('vidsrc-iframe');
   if(old){old.src='about:blank';old.remove();}
   const loader=document.getElementById('player-loader');
   if(loader)loader.classList.add('on');
   hideSourceHint();
-  const srv=getCurrentServer();
-  const url=type==='movie'?srv.movie(id):srv.tv(id,season,ep);
-  const iframe=document.createElement('iframe');
-  iframe.id='vidsrc-iframe';
-  iframe.setAttribute('allowfullscreen','');
-  iframe.setAttribute('allow','autoplay; fullscreen; picture-in-picture; encrypted-media');
-  iframe.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:none;z-index:2;background:#000;display:block;';
-  iframe.src=url;
-  // The iframe's own onload fires when the outer document loads — not when
-  // the embed's internal player UI has actually initialized. Removing the
-  // loader at that exact moment causes the "click play multiple times" bug,
-  // since the underlying player isn't interactive yet. Enforce a minimum
-  // visible duration so the embed has time to finish setting up.
-  const loadStart=Date.now();
-  const MIN_LOADER_MS=1800;
-  iframe.onload=()=>{
-    const elapsed=Date.now()-loadStart;
-    const remaining=Math.max(0,MIN_LOADER_MS-elapsed);
-    setTimeout(()=>{if(loader)loader.classList.remove('on');},remaining);
+  const item=S.playerItem;
+  const kind=providerKind(item,type);
+  const srv=(forceId&&SERVERS.find(x=>x.id===forceId))||activeProvider(item,type);
+  S.activeSrc=srv.id;
+  buildServerSwitcher();
+  const token=++_loadToken;
+  const ctx={item,type,season,ep,kind,srv,resumeAt:resumePoint(item,season,ep)};
+
+  const mount=url=>{
+    const iframe=document.createElement('iframe');
+    iframe.id='vidsrc-iframe';
+    iframe.setAttribute('allowfullscreen','');
+    iframe.setAttribute('allow','autoplay; fullscreen; picture-in-picture; encrypted-media; screen-wake-lock');
+    iframe.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:none;z-index:2;background:#000;display:block;';
+    iframe.src=url;
+    // The iframe's own onload fires when the outer document loads — not when
+    // the embed's internal player UI has actually initialized. Removing the
+    // loader at that exact moment causes the "click play multiple times" bug,
+    // since the underlying player isn't interactive yet. Enforce a minimum
+    // visible duration so the embed has time to finish setting up.
+    const loadStart=Date.now();
+    const MIN_LOADER_MS=1800;
+    iframe.onload=()=>{
+      const elapsed=Date.now()-loadStart;
+      const remaining=Math.max(0,MIN_LOADER_MS-elapsed);
+      setTimeout(()=>{if(loader)loader.classList.remove('on');},remaining);
+      if(srv.id==='vidrift')vidriftHandshake(iframe,ctx);
+    };
+    wrap.appendChild(iframe);
+    // Some sources silently fail (dead host, blocked embed) without ever
+    // erroring — the iframe just sits there. An iframe gives no reliable
+    // failure signal, so this only SUGGESTS switching; it never switches or
+    // cycles sources by itself.
+    clearTimeout(_srcHintTimer);
+    _srcHintTimer=setTimeout(()=>showSourceHint(),9000);
   };
-  wrap.appendChild(iframe);
-  // Some sources silently fail (dead host, blocked embed) without ever
-  // erroring — the iframe just sits there. Nudge the user toward switching
-  // sources if nothing seems to have happened after a while, instead of
-  // leaving them staring at a blank/black rectangle.
-  clearTimeout(_srcHintTimer);
-  _srcHintTimer=setTimeout(showSourceHint,9000);
+  const fail=msg=>{
+    if(token!==_loadToken)return;
+    if(loader)loader.classList.remove('on');
+    showSourceHint(msg);
+  };
+
+  // Plain sources build their URL synchronously; branded or look-up based
+  // ones (VidRift, ani.pm) go through resolve(), which may be async.
+  Promise.resolve(srv.resolve?srv.resolve(ctx):(type==='movie'?srv.movie(id):srv.tv(id,season,ep)))
+    .then(url=>{
+      if(token!==_loadToken)return; // a newer selection replaced this one
+      if(!url)return fail(`${srv.label} doesn't have this title. Try another source.`);
+      mount(url);
+    })
+    .catch(()=>fail(`Couldn't reach ${srv.label}. Try another source.`));
 }
-function showSourceHint(){
-  document.getElementById('player-source-hint')?.classList.add('show');
+function showSourceHint(msg){
+  const el=document.getElementById('player-source-hint');if(!el)return;
+  const span=el.querySelector('span');if(span)span.textContent=msg||SRC_HINT_DEFAULT;
+  el.classList.add('show');
 }
 function hideSourceHint(){
   clearTimeout(_srcHintTimer);
@@ -1333,9 +1632,10 @@ function hideSourceHint(){
 }
 
 function stopPlayer(){
-  if(S.playerItem&&S.playerOpenTime&&S.playerRuntime){
-    const elapsed=Date.now()-S.playerOpenTime;
-    const pct=Math.min(Math.round((elapsed/S.playerRuntime)*100),99);
+  if(S.playerItem){
+    let pct=0;
+    if(_livePos.key===livePosKey()&&_livePos.d>0)pct=Math.round((_livePos.t/_livePos.d)*100); // real position
+    else if(S.playerOpenTime&&S.playerRuntime)pct=Math.min(Math.round(((Date.now()-S.playerOpenTime)/S.playerRuntime)*100),99); // fallback guess
     if(pct>2)saveProg(S.playerItem.id,S.playerType,S.playerSeason,S.playerEp,pct);
   }
   const iframe=document.getElementById('vidsrc-iframe');
@@ -1376,24 +1676,51 @@ async function loadBelowContent(item,type,details){
    ══════════════════════════════════════════ */
 function buildServerSwitcher(){
   const container=document.getElementById('server-switcher');if(!container)return;
+  const item=S.playerItem,type=S.playerType||'movie';
+  const kind=providerKind(item,type),list=providersFor(kind);
+  const rec=recommendedProvider(kind);
+  const activeId=S.activeSrc||activeProvider(item,type).id;
   container.innerHTML='';
-  SERVERS.forEach((srv,i)=>{
+  list.forEach(srv=>{
+    const isActive=srv.id===activeId,isRec=!!rec&&srv.id===rec.id,meta=providerMeta(srv);
     const btn=document.createElement('button');
-    btn.className=`server-opt${i===_currentServer?' active':''}`;
+    btn.className=`server-opt${isActive?' active':''}`;
     btn.setAttribute('role','tab');
-    btn.setAttribute('aria-selected',i===_currentServer?'true':'false');
-    btn.dataset.idx=i;
-    btn.innerHTML=`
-      <span class="srv-name">${srv.label}</span>
-      ${srv.tag?`<span class="srv-tag">${srv.tag}</span>`:''}
-      ${i===_currentServer?'<span class="srv-active-ind"></span>':''}`;
-    btn.addEventListener('click',()=>{
-      setServer(i);
-      // Don't close panel on click — allow quick switching
-      buildServerSwitcher();
-    });
+    btn.setAttribute('aria-selected',isActive?'true':'false');
+    btn.dataset.id=srv.id;
+    btn.title=[
+      isRec&&"Suggested: first in Watchy's configured order for this kind of title. Not a measured result.",
+      meta.custom&&`Branding: ${meta.custom}`,
+      `Arabic subtitles: ${meta.arabic||SUB_NOTE_DEFAULT}`,
+      meta.ads&&'Shows an ad',
+    ].filter(Boolean).join('\n');
+    btn.innerHTML=`<span class="srv-name">${srv.label}</span><span class="srv-tag">${srv.tag||''}</span>${isRec?'<span class="srv-rec">Suggested</span>':''}`;
+    btn.addEventListener('click',()=>setServer(srv.id)); // panel stays open for quick switching
     container.appendChild(btn);
   });
+  buildSubLangRow();
+}
+function buildSubLangRow(){
+  const row=document.getElementById('src-sub');if(!row)return;
+  const opts=row.querySelector('.src-sub-opts'),note=document.getElementById('src-sub-note');
+  if(!opts||!note)return;
+  opts.innerHTML='';
+  [['auto','Auto',''],['ar','العربية','ar'],['en','English','en']].forEach(([v,label,lang])=>{
+    const b=document.createElement('button');
+    b.className=`src-sub-btn${_subLang===v?' active':''}`;
+    b.textContent=label;if(lang)b.lang=lang;if(v==='ar')b.dir='rtl';
+    b.setAttribute('aria-pressed',_subLang===v?'true':'false');
+    b.addEventListener('click',()=>setSubLang(v));
+    opts.appendChild(b);
+  });
+  // Honest by construction: say what is actually requested, never promise a track.
+  const onAni=(S.activeSrc||'').startsWith('anipm');
+  note.textContent=
+    _subLang==='auto'?'Each source uses its own subtitle menu.':
+    onAni&&_subLang==='ar'?'Arabic is requested from AniPM. If this episode has no Arabic track, English is shown.':
+    onAni?'English is requested from AniPM.':
+    _subLang==='ar'?"This source uses its own subtitle menu, so Arabic can't be confirmed. For anime, AniPM requests Arabic directly.":
+    'This source uses its own subtitle menu.';
 }
 function openSrcPanel(){
   const p=document.getElementById('src-panel');if(!p)return;
@@ -1741,6 +2068,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('hero-info-btn').addEventListener('click',()=>{const item=S.heroItems[S.heroIdx];if(item)openTitlePage(item);});
   // Continue watching
   document.getElementById('continue-clear-btn')?.addEventListener('click',()=>{S.hist=[];S.prog={};save();refreshContRow();showToast('Cleared');});
+  document.getElementById('fav-clear-btn')?.addEventListener('click',()=>{
+    if(!S.favs.length||!window.confirm('Remove every title from My List?'))return;
+    S.favs=[];save();refreshFavPage();showToast('My List cleared');
+  });
   // Player
   document.getElementById('player-back-btn').addEventListener('click',()=>{stopPlayer();goTo(S.lastPage||'home',false,true);});
   document.getElementById('player-logo-btn')?.addEventListener('click',()=>{stopPlayer();goTo('home');});
@@ -1817,9 +2148,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     }).observe(srcPanel,{attributes:true,attributeFilter:['class']});
   }
   // Setup
-  setupGenres();initKeyboard();initDiscoverSwipe();initRipple();initRailArrows();
+  setupGenres();initKeyboard();initDiscoverSwipe();initRipple();initRailArrows();initLogoSpotlight();
   document.fonts?.ready.then(moveNavUnderline);
   window.addEventListener('resize',moveNavUnderline);
+  // The links are centered, so they shift sideways whenever the page
+  // scrollbar appears or disappears (rails loading in, switching between a
+  // long and a short page). The window 'resize' event doesn't fire for that,
+  // which left the underline stranded off-center. Watching the links'
+  // container catches every such shift.
+  if(window.ResizeObserver){
+    const navLinksEl=document.querySelector('.nav-links');
+    if(navLinksEl)new ResizeObserver(()=>moveNavUnderline()).observe(navLinksEl);
+  }
   // Boot
   const bootHash=window.location.hash; // captured before goTo can clear it below
   goTo(startPage,true);
