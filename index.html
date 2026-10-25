@@ -36,6 +36,8 @@
 </head>
 <body>
 
+<div class="load-bar" id="load-bar" aria-hidden="true"></div>
+
 <!-- INTRO -->
 <div class="intro" id="intro">
   <div class="intro-word">
@@ -53,7 +55,7 @@
     <button class="nav-link active" data-page="home">Home</button>
     <button class="nav-link" data-page="movies">Movies</button>
     <button class="nav-link" data-page="series">Series</button>
-    <button class="nav-link" data-page="discover">Discover</button>
+    <button class="nav-link" data-page="anime">Anime</button>
     <button class="nav-link" data-page="mylist">My List</button>
   </div>
   <div class="nav-right">
@@ -99,13 +101,13 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
     <span>Movies</span>
   </button>
-  <button class="bot-nav-item" data-page="discover">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
-    <span>Discover</span>
-  </button>
   <button class="bot-nav-item" data-page="series">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
     <span>Series</span>
+  </button>
+  <button class="bot-nav-item" data-page="anime">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8L21.5 17.5l-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+    <span>Anime</span>
   </button>
   <button class="bot-nav-item" data-page="mylist">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -247,161 +249,56 @@
 
 <!-- MY LIST -->
 <div id="page-mylist" class="page">
-  <div class="aux-header">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
-      <div><h1 class="aux-title">My List</h1><p class="aux-sub">Everything you've saved</p></div>
-      <button class="section-clear-btn" id="fav-clear-btn" type="button" hidden>Clear all</button>
-    </div>
-  </div>
+  <div class="aux-header"><h1 class="aux-title">My List</h1><p class="aux-sub">Everything you've saved</p></div>
   <div id="fav-grid" class="grid-page"></div>
 </div>
 
-<!-- DISCOVER PAGE -->
-<div id="page-discover" class="page">
-  <div class="discover-wrap">
-
-    <div class="discover-top">
-      <div class="discover-top-row">
-        <div>
-          <h1 class="discover-heading">Discover</h1>
-          <p class="discover-sub">Swipe through curated picks, find your next watch</p>
-        </div>
-        <div class="discover-type-row">
-          <button class="discover-type-btn active" data-t="movie" id="discover-type-movie">Movies</button>
-          <button class="discover-type-btn" data-t="tv" id="discover-type-tv">Series</button>
-        </div>
-      </div>
-      <div class="discover-genres">
-        <button class="discover-genre-chip active" data-g="">All</button>
-        <button class="discover-genre-chip" data-g="28">Action</button>
-        <button class="discover-genre-chip" data-g="18">Drama</button>
-        <button class="discover-genre-chip" data-g="35">Comedy</button>
-        <button class="discover-genre-chip" data-g="27">Horror</button>
-        <button class="discover-genre-chip" data-g="878">Sci-Fi</button>
-        <button class="discover-genre-chip" data-g="53">Thriller</button>
-        <button class="discover-genre-chip" data-g="10749">Romance</button>
-        <button class="discover-genre-chip" data-g="16">Animation</button>
-        <button class="discover-genre-chip" data-g="99">Documentary</button>
-        <button class="discover-genre-chip" data-g="80">Crime</button>
-      </div>
-      <div class="discover-filters">
-        <select class="discover-filter-select" id="discover-year-filter" aria-label="Release year">
-          <option value="">Any Year</option>
-          <option value="2020s">2020s</option>
-          <option value="2010s">2010s</option>
-          <option value="2000s">2000s</option>
-          <option value="1990s">1990s</option>
-          <option value="older">Before 1990</option>
-        </select>
-        <select class="discover-filter-select" id="discover-rating-filter" aria-label="Minimum rating">
-          <option value="">Any Rating</option>
-          <option value="9">9+ Rating</option>
-          <option value="8">8+ Rating</option>
-          <option value="7">7+ Rating</option>
-          <option value="6">6+ Rating</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="discover-loading" id="discover-loading" style="display:none">
-      <div class="discover-spinner"></div>
-      <span class="discover-loading-text">Curating picks…</span>
-    </div>
-
-    <div class="discover-stage">
-      <div class="discover-card" id="discover-card">
-        <div class="discover-bg" id="discover-bg"></div>
-        <div class="discover-overlay"></div>
-        <div class="discover-grain"></div>
-
-        <!-- Floating glass info panel -->
-        <div class="discover-glass-panel">
-          <div class="discover-content">
-            <div class="discover-tags">
-              <div class="discover-genre-tag" id="discover-genre"></div>
-            </div>
-            <h2 class="discover-title" id="discover-title"></h2>
-            <div class="discover-meta-row">
-              <span id="discover-score"></span>
-              <span class="hero-sep"></span>
-              <span id="discover-year"></span>
-            </div>
-            <p class="discover-overview" id="discover-overview"></p>
-            <div class="discover-actions">
-              <button class="btn-primary" id="discover-watch">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                More Info
-              </button>
-              <button class="discover-fav-btn" id="discover-fav">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l8.84 8.84 8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                My List
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="discover-nav">
-          <button class="discover-arrow" id="discover-prev" aria-label="Previous">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-          <span class="discover-counter" id="discover-counter">1 / 20</span>
-          <button class="discover-arrow" id="discover-next" aria-label="Next">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="m9 18 6-6-6-6"/></svg>
-          </button>
-        </div>
-        <div class="discover-hint">Swipe or use ← → keys</div>
-      </div>
-    </div>
-  </div>
+<!-- ANIME PAGE -->
+<div id="page-anime" class="page">
+  <div class="aux-header"><h1 class="aux-title">Anime</h1><p class="aux-sub">Series and films from Japan, most popular first</p></div>
+  <div id="anime-grid" class="grid-page"></div>
+  <div class="load-more-sentinel" id="anime-sentinel" style="display:none"><div class="load-more-spinner"></div></div>
 </div>
 
 <!-- TITLE PAGE -->
 <div id="page-title" class="page">
   <div class="tp-body">
-    <button class="tp-back-btn" id="tp-back-btn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="m15 18-6-6 6-6"/></svg>
-      Back
-    </button>
-
-    <div class="tp-hero-card">
-      <div class="tp-hero-card-bg">
+    <section class="tp-stage">
+      <div class="tp-stage-bg">
         <div class="tp-backdrop-lq" id="tp-backdrop-lq"></div>
         <div class="tp-backdrop" id="tp-backdrop"></div>
         <div class="tp-backdrop-grad"></div>
         <div class="tp-backdrop-vignette"></div>
       </div>
 
+      <button class="tp-back-btn" id="tp-back-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="m15 18-6-6 6-6"/></svg>
+        Back
+      </button>
+
       <div class="tp-hero-row">
-      <!-- Poster -->
-      <div class="tp-poster-col">
-        <div class="tp-poster-wrap">
-          <img class="tp-poster-img" id="tp-poster-img" src="" alt="" style="display:none">
-          <div class="tp-poster-ph" id="tp-poster-ph">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="32" height="32"><rect x="2" y="2" width="20" height="20" rx="3"/><path d="m7 8 4 3-4 3V8z"/></svg>
+        <div class="tp-poster-col">
+          <div class="tp-poster-wrap">
+            <img class="tp-poster-img" id="tp-poster-img" src="" alt="" style="display:none">
+            <div class="tp-poster-ph" id="tp-poster-ph">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="32" height="32"><rect x="2" y="2" width="20" height="20" rx="3"/><path d="m7 8 4 3-4 3V8z"/></svg>
+            </div>
           </div>
-          <div class="tp-poster-shine"></div>
         </div>
-      </div>
 
-      <!-- Info column -->
-      <div class="tp-info-col">
-        <div class="tp-badges">
-          <span class="tp-type-badge" id="tp-type-badge">Movie</span>
-          <span id="tp-score"></span>
-        </div>
-        <h1 class="tp-title" id="tp-title">Loading…</h1>
-        <div class="tp-meta-row">
-          <span id="tp-year"></span>
-          <span class="hero-sep"></span>
-          <span id="tp-runtime"></span>
-          <span class="hero-sep"></span>
-          <span id="tp-seasons"></span>
-        </div>
-        <div id="tp-genres" class="tp-genres"></div>
-        <p class="tp-overview" id="tp-overview"></p>
+        <div class="tp-info-col">
+          <div class="tp-badges">
+            <span class="tp-type-badge" id="tp-type-badge">Movie</span>
+            <span id="tp-score"></span>
+          </div>
+          <h1 class="tp-title" id="tp-title"></h1>
+          <p class="tp-tagline" id="tp-tagline"></p>
+          <div class="tp-meta-row" id="tp-meta"></div>
+          <div id="tp-genres" class="tp-genres"></div>
+          <p class="tp-overview" id="tp-overview"></p>
+          <button class="tp-more" id="tp-more" type="button" aria-expanded="false" hidden>More</button>
 
-        <!-- Premium glassmorphic action bar -->
-        <div class="tp-actions">
+          <div class="tp-actions">
           <button class="btn-primary tp-watch-main" id="tp-watch-btn">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Watch Now
           </button>
@@ -415,10 +312,13 @@
           <button class="tp-icon-btn" id="tp-copy-link-btn" title="Copy Link">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           </button>
+          </div>
         </div>
       </div>
-      </div><!-- /tp-hero-row -->
-    </div><!-- /tp-hero-card -->
+    </section>
+
+    <!-- Facts: director / release / language / status -->
+    <div class="tp-facts" id="tp-facts"></div>
 
     <!-- Cast -->
     <section class="tp-section">
@@ -580,7 +480,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="js/app.js"></script>
+<script src="js/app.min.js"></script>
 <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 </body>
 </html>

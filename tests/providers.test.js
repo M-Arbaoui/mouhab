@@ -32,7 +32,8 @@ const mockServers = Registry.DIRECT_PLAYERS.map((p) => ({
 test('existing providers still register in documented order', () => {
   const appIds = loadAppServers();
   const registryIds = Registry.defaultPriorityIds();
-  assert.deepEqual(appIds, registryIds);
+  assert.deepEqual(appIds.filter((id) => registryIds.includes(id)), registryIds);
+  assert.deepEqual(appIds.filter((id) => !registryIds.includes(id)), ['vidrift', 'anipm', 'anipm_dub']);
   const registered = Registry.registerServers(mockServers);
   assert.equal(registered.length, registryIds.length);
   registered.forEach((row, i) => {

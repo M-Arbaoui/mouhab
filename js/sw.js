@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════
-   Watchy. — Service Worker v5
+  Watchy. — Service Worker v10
    Cache-first: app shell + images
    Network-first: TMDB API
    Never cache: stream embeds
    ═══════════════════════════════════════════════ */
-const CACHE     = 'watchy-shell-v5';
+const CACHE     = 'watchy-shell-v10';
 const API_CACHE = 'watchy-api-v5';
 const IMG_CACHE = 'watchy-img-v5';
 
@@ -12,7 +12,9 @@ const SHELL = [
   './',
   './index.html',
   './css/style.min.css',
-  './js/app.min.js',
+  './css/wordmark.css',
+  './css/fieldnotes.css',
+  './js/app.js',
   './manifest.json',
   './og-image.png',
   './icon-192.png',
@@ -39,7 +41,7 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
-        keys.filter(k => ![CACHE, API_CACHE, IMG_CACHE].includes(k))
+        keys.filter(k => k.startsWith('watchy-') && ![CACHE, API_CACHE, IMG_CACHE].includes(k))
             .map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
@@ -71,10 +73,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App shell — network-first, cache as the offline fallback. This was
-  // cache-first with a fixed cache name, which never rechecked the network:
-  // anyone who had already loaded the site kept getting their old JS and CSS
-  // no matter how many updates shipped.
+  // App shell — network-first, cache as the offline fallback.
   if (url.hostname === self.location.hostname && e.request.method === 'GET') {
     e.respondWith(shellNetworkFirst(e.request));
   }
