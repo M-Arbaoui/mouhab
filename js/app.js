@@ -300,6 +300,17 @@ const SERVERS=[
     tv:(id,s,e)=>`https://embed.vidrift.net/embed/tv/${id}/${s}/${e}`,
     resolve:ctx=>vidriftUrl(ctx),
   },
+  // FrameXTV. Embed shapes as documented for the player domain framextv.xyz
+  // (not framextv.cc, which is the marketing site):
+  //   movie    /embed/{tmdbId}                       e.g. /embed/550?autoplay=1&muted=0
+  //   episode  /embed/{tmdbId}/{season}/{episode}    e.g. /embed/1396/1/1
+  // The query string is used exactly as in the supplied movie example. The
+  // episode example has none, so none is added: no parameter is assumed.
+  {
+    id:'framextv', label:'FrameXTV', tag:'NEW',
+    movie:id=>`https://framextv.xyz/embed/${id}?autoplay=1&muted=0`,
+    tv:(id,s,e)=>`https://framextv.xyz/embed/${id}/${s}/${e}`,
+  },
   // ani.pm is anime-only (kinds) and needs an AniList id, which TMDB doesn't
   // have — resolveAniPm() looks the title up first, so it returns a Promise.
   { id:'anipm',     label:'AniPM',     tag:'NEW', kinds:['anime'], lang:'sub', resolve:ctx=>resolveAniPm(ctx) },
@@ -318,7 +329,7 @@ const SERVERS=[
 const WATCHY_ACCENT='C9A96E'; // = --gold in style.css (hex without #, as the embeds expect)
 const PROVIDER_ORDER_BASE=[
   // Tier 1 — newly integrated
-  'vidrift',
+  'vidrift','framextv',
   // Tier 2 — preferred
   'vidking','vidsrc_xyz','vidsrc_sbs','vidsrc_to','superembed','autoembed',
   // Tier 3 — alternatives
