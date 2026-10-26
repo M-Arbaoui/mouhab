@@ -373,17 +373,33 @@
 
 <!-- PLAYER -->
 <div id="page-player" class="page">
-  <div class="player-topbar">
-    <button class="player-topbar-logo" id="player-logo-btn" aria-label="Go to Home">Watchy<span class="dot">.</span></button>
-    <div class="player-topbar-right">
-      <button class="src-toggle-btn" id="server-panel-toggle" aria-haspopup="true" aria-expanded="false" title="Switch source">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Sources
-        <span class="src-active-dot"></span>
+  <!-- Cinematic mode: a thin strip at the very top reveals the (hidden) bar -->
+  <div class="cine-hot" aria-hidden="true"></div>
+  <div class="player-topbar" id="player-topbar">
+    <div class="pt-left">
+      <button class="pb" id="player-back-btn" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="m15 18-6-6 6-6"/></svg>
+        <span class="pb-label">Back</span>
       </button>
-      <button class="player-back-btn" id="player-back-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
-        Back
+      <button class="player-topbar-logo" id="player-logo-btn" aria-label="Go to Home">Watchy<span class="dot">.</span></button>
+    </div>
+    <div class="pt-now" aria-live="polite">
+      <span class="pt-now-title" id="pt-now-title"></span>
+      <span class="pt-now-sub" id="pt-now-sub"></span>
+    </div>
+    <div class="player-topbar-right">
+      <button class="pb player-cine-btn" id="player-cine-btn" type="button" aria-pressed="false" title="Cinematic mode (T)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="15" height="15"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M18 15h.01"/></svg>
+        <span class="pb-label">Cinematic</span>
+      </button>
+      <button class="pb player-fs-btn" id="player-fs-btn" type="button" aria-label="Fullscreen" aria-pressed="false" title="Fullscreen (F)" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="15" height="15"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <span class="pb-label">Fullscreen</span>
+      </button>
+      <button class="pb src-toggle-btn" id="server-panel-toggle" aria-haspopup="true" aria-expanded="false" title="Switch source">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span class="pb-label">Sources</span>
+        <span class="src-active-dot"></span>
       </button>
     </div>
   </div>
@@ -408,59 +424,69 @@
     </div>
   </div>
 
-  <div class="player-embed-wrap" id="player-embed-wrap">
-    <div class="player-loader" id="player-loader"><div class="player-loader-ring"></div></div>
-    <div class="player-source-hint" id="player-source-hint">
-      <span>Nothing playing? This source may be down.</span>
-      <button id="player-source-hint-btn">Try another source</button>
-      <button class="player-source-hint-close" id="player-source-hint-close" aria-label="Dismiss">✕</button>
-    </div>
-  </div>
-
-  <!-- Episode nav bar — only visible for TV shows -->
-  <div class="player-ep-nav" id="player-ep-nav" style="display:none">
-    <button class="pep-nav-btn" id="player-prev-btn" title="Previous episode (P)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="m15 18-6-6 6-6"/></svg>
-      Prev
-    </button>
-    <span class="player-ep-counter" id="player-ep-counter"></span>
-    <button class="pep-nav-btn" id="player-next-btn" title="Next episode (N)">
-      Next
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="m9 18 6-6-6-6"/></svg>
-    </button>
-    <button class="pep-nav-eps-btn" id="player-ep-toggle">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
-      Episodes
-    </button>
-  </div>
-
-  <div class="player-ep-panel" id="player-ep-panel">
-    <div class="pep-handle"></div>
-    <div class="pep-head">
-      <div class="pep-title">Episodes</div>
-      <div id="pep-season-tabs"></div>
-      <button class="pep-close" id="pep-close">✕</button>
-    </div>
-    <div class="pep-list" id="pep-list"></div>
-  </div>
-
-  <div class="below-player">
-    <div class="below-row">
-      <div>
-        <div class="below-title" id="below-title">Watchy.</div>
-        <div class="below-meta" id="below-meta"></div>
+  <div class="watch-stage" id="watch-stage">
+    <div class="watch-ambient" aria-hidden="true"></div>
+    <div class="player-embed-wrap" id="player-embed-wrap">
+      <div class="player-loader" id="player-loader">
+        <div class="player-loader-ring"></div>
+        <span class="player-loader-label" id="player-loader-label"></span>
+      </div>
+      <div class="player-source-hint" id="player-source-hint">
+        <span>Nothing playing? This source may be down.</span>
+        <button id="player-source-hint-btn">Try another source</button>
+        <button class="player-source-hint-close" id="player-source-hint-close" aria-label="Dismiss">✕</button>
       </div>
     </div>
-    <div style="display:none">
+  </div>
+
+  <div class="watch-col">
+    <!-- Episode controls — TV only -->
+    <div class="player-ep-nav" id="player-ep-nav" style="display:none">
+      <button class="pep-nav-btn" id="player-prev-btn" title="Previous episode (P)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="m15 18-6-6 6-6"/></svg>
+        Prev
+      </button>
+      <span class="player-ep-counter" id="player-ep-counter"></span>
+      <button class="pep-nav-btn" id="player-next-btn" title="Next episode (N)">
+        Next
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <button class="pep-nav-eps-btn" id="player-ep-toggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        All episodes
+      </button>
     </div>
-    <section id="collection-sec" class="below-section" style="display:none">
-      <div class="section-head"><h2 class="section-title" id="collection-title">Other Parts</h2></div>
-      <div id="collection-rail" class="rail"></div>
-    </section>
-    <section id="similar-sec" class="below-section" style="display:none">
-      <div class="section-head"><h2 class="section-title" id="similar-title">More Like This</h2></div>
-      <div id="similar-rail" class="rail"></div>
-    </section>
+
+    <div class="below-player">
+      <div class="watch-info">
+        <div class="watch-badges">
+          <span class="tp-type-badge" id="watch-type">Movie</span>
+          <span id="watch-score"></span>
+        </div>
+        <h1 class="watch-title" id="below-title"></h1>
+        <div class="tp-meta-row" id="below-meta"></div>
+        <div class="tp-genres" id="watch-genres"></div>
+        <p class="tp-overview" id="watch-overview"></p>
+        <button class="tp-more" id="watch-more" type="button" aria-expanded="false" hidden>More</button>
+      </div>
+
+      <section id="watch-eps" class="below-section watch-eps" style="display:none">
+        <div class="tp-eps-head">
+          <h2 class="tp-section-title">Episodes</h2>
+          <div class="tp-season-pills" id="watch-season-tabs"></div>
+        </div>
+        <div class="ep-list" id="watch-ep-list"></div>
+      </section>
+
+      <section id="collection-sec" class="below-section" style="display:none">
+        <div class="section-head"><h2 class="section-title" id="collection-title">Other Parts</h2></div>
+        <div id="collection-rail" class="rail"></div>
+      </section>
+      <section id="similar-sec" class="below-section" style="display:none">
+        <div class="section-head"><h2 class="section-title" id="similar-title">More Like This</h2></div>
+        <div id="similar-rail" class="rail"></div>
+      </section>
+    </div>
   </div>
 </div>
 

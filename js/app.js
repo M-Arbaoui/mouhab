@@ -1229,8 +1229,8 @@ const loadBar=(()=>{
 })();
 
 /* ── Title page helpers ── */
-function renderTitleMeta(parts){
-  const row=document.getElementById('tp-meta');if(!row)return;
+function renderTitleMeta(parts,rowId='tp-meta'){
+  const row=document.getElementById(rowId);if(!row)return;
   row.innerHTML='';
   parts.filter(Boolean).forEach((p,i)=>{
     if(i){const sep=document.createElement('span');sep.className='hero-sep';row.appendChild(sep);}
@@ -1269,8 +1269,8 @@ function renderTitleFacts(details,type){
   });
 }
 // "More" appears only when the overview is actually cut off.
-function initOverviewToggle(){
-  const ov=document.getElementById('tp-overview'),btn=document.getElementById('tp-more');
+function bindOverviewToggle(ovId,btnId){
+  const ov=document.getElementById(ovId),btn=document.getElementById(btnId);
   if(!ov||!btn)return;
   const sync=()=>{if(!ov.classList.contains('expanded'))btn.hidden=!(ov.scrollHeight>ov.clientHeight+2);};
   btn.addEventListener('click',()=>{
@@ -1279,8 +1279,8 @@ function initOverviewToggle(){
   });
   if(window.ResizeObserver)new ResizeObserver(sync).observe(ov); // also fires when the page becomes visible
 }
-function resetOverviewToggle(){
-  const ov=document.getElementById('tp-overview'),btn=document.getElementById('tp-more');
+function resetOverviewToggle(ovId='tp-overview',btnId='tp-more'){
+  const ov=document.getElementById(ovId),btn=document.getElementById(btnId);
   if(ov)ov.classList.remove('expanded');
   if(btn){btn.textContent='More';btn.setAttribute('aria-expanded','false');btn.hidden=true;}
 }
@@ -1455,6 +1455,53 @@ const castPH=()=>`<div class="cast-ph"><svg viewBox="0 0 24 24" fill="none" stro
 /* ══════════════════════════════════════════
    SEASON / EPISODE DROPDOWNS
    ══════════════════════════════════════════ */
+/* One episode row, shared by the title page and the watch page. Built with
+   textContent: names and summaries come from an external API. */
+function makeEpisodeRow(item,sNum,ep,{current=false,tag='Continue'}={}){
+  const name=ep.name||`Episode ${ep.episode_number}`;
+  const pct=getProg(item.id,'tv',sNum,ep.episode_number);
+  const row=document.createElement('div');
+  row.className=`ep-item${current?' ep-item-current':''}`;
+  row.tabIndex=0;row.setAttribute('role','button');
+  row.setAttribute('aria-label',`Episode ${ep.episode_number}, ${name}${current?', playing now':''}`);
+  const still=document.createElement('div');still.className='ep-still-wrap';
+  if(ep.still_path){
+    const img=document.createElement('img');img.className='ep-still';
+    img.src=`${TMDB_IMG}/w300${ep.still_path}`;img.alt='';img.loading='lazy';img.decoding='async';
+    still.appendChild(img);
+  }else{
+    const ph=document.createElement('div');ph.className='ep-still ep-still-ph';
+    ph.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1"><path d="m7 8 4 3-4 3V8z"/></svg>';
+    still.appendChild(ph);
+  }
+  const play=document.createElement('div');play.className='ep-still-play';
+  play.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg>';
+  still.appendChild(play);
+  if(pct>0){
+    const bar=document.createElement('div');bar.className='ep-prog-bar';
+    const fill=document.createElement('div');fill.className='ep-prog-fill';fill.style.width=`${pct}%`;
+    bar.appendChild(fill);still.appendChild(bar);
+  }
+  const info=document.createElement('div');info.className='ep-info';
+  const top=document.createElement('div');top.className='ep-info-top';
+  const add=(cls,text)=>{const sp=document.createElement('span');sp.className=cls;sp.textContent=text;top.appendChild(sp);};
+  add('ep-num',`E${ep.episode_number}`);
+  add('ep-name',name);
+  if(ep.runtime)add('ep-dur',`${ep.runtime}m`);
+  if(current)add('ep-current-tag',tag);
+  info.appendChild(top);
+  if(ep.overview){
+    const ov=document.createElement('div');ov.className='ep-overview';
+    ov.textContent=ep.overview.length>120?ep.overview.slice(0,120)+'…':ep.overview;
+    info.appendChild(ov);
+  }
+  row.append(still,info);
+  const go=()=>openPlayer(item,'tv',sNum,ep.episode_number,ep.name);
+  row.addEventListener('click',go);
+  row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
+  return row;
+}
+
 function buildTitlePageSeasons(item,details){
   const seasons=(details.seasons||[]).filter(s=>s.season_number>0);
   const pillsWrap=document.getElementById('tp-season-tabs');
@@ -1480,41 +1527,15 @@ function buildTitlePageSeasons(item,details){
 
   async function loadSeasonEps(sNum){
     list.innerHTML=`<div class="ep-loading">Loading episodes…</div>`;
-
     if(!S.playerSeasonData[item.id])S.playerSeasonData[item.id]={};
     if(!S.playerSeasonData[item.id][sNum]){
       S.playerSeasonData[item.id][sNum]=await A.season(item.id,sNum);
     }
     const eps=S.playerSeasonData[item.id][sNum]?.episodes||[];
-
     list.innerHTML='';
     eps.forEach(ep=>{
-      const pct=getProg(item.id,'tv',sNum,ep.episode_number);
       const isLast=lastEp&&lastEp.season===sNum&&lastEp.episode===ep.episode_number;
-      const still=ep.still_path?`${TMDB_IMG}/w300${ep.still_path}`:null;
-      const row=document.createElement('div');row.className=`ep-item${isLast?' ep-item-current':''}`;
-      row.tabIndex=0;row.setAttribute('role','button');
-      row.setAttribute('aria-label',`Episode ${ep.episode_number}, ${ep.name||'Episode '+ep.episode_number}`);
-      row.innerHTML=`
-        <div class="ep-still-wrap">
-          ${still?`<img class="ep-still" src="${still}" alt="" loading="lazy">`:`<div class="ep-still ep-still-ph"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1"><path d="m7 8 4 3-4 3V8z"/></svg></div>`}
-          <div class="ep-still-play"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M8 5v14l11-7z"/></svg></div>
-          ${pct>0?`<div class="ep-prog-bar"><div class="ep-prog-fill" style="width:${pct}%"></div></div>`:''}
-        </div>
-        <div class="ep-info">
-          <div class="ep-info-top">
-            <span class="ep-num">E${ep.episode_number}</span>
-            <span class="ep-name">${ep.name||'Episode '+ep.episode_number}</span>
-            ${ep.runtime?`<span class="ep-dur">${ep.runtime}m</span>`:''}
-            ${isLast?`<span class="ep-current-tag">Continue</span>`:''}
-          </div>
-          ${ep.overview?`<div class="ep-overview">${ep.overview.slice(0,120)}${ep.overview.length>120?'…':''}</div>`:''}
-        </div>`;
-      row.addEventListener('click',()=>openPlayer(item,'tv',sNum,ep.episode_number,ep.name));
-      row.addEventListener('keydown',e=>{
-        if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlayer(item,'tv',sNum,ep.episode_number,ep.name);}
-      });
-      list.appendChild(row);
+      list.appendChild(makeEpisodeRow(item,sNum,ep,{current:!!isLast,tag:'Continue'}));
     });
   }
 
@@ -1544,6 +1565,106 @@ async function openPersonPage(id){
 /* ══════════════════════════════════════════
    PLAYER
    ══════════════════════════════════════════ */
+/* ── Watch page: header, info block, episodes, cinematic mode ── */
+function setWatchHeader(item,type,season,ep,epName){
+  const t=document.getElementById('pt-now-title'),sub=document.getElementById('pt-now-sub');
+  if(t)t.textContent=ttl(item);
+  if(sub)sub.textContent=type==='tv'?`S${season} · E${ep}${epName?' — '+epName:''}`:yr(item);
+  // The title's own artwork: the glow behind the player and the loading screen.
+  const pg=document.getElementById('page-player');
+  const art=imgBLq(item.backdrop_path)||imgBLq(item.poster_path);
+  if(pg)pg.style.setProperty('--amb',art?`url("${art}")`:'none');
+}
+function renderWatchInfo(item,type,details){
+  document.getElementById('watch-type').textContent=type==='tv'?'Series':'Movie';
+  document.getElementById('watch-score').innerHTML=fmtScore(item.vote_average);
+  document.getElementById('below-title').textContent=ttl(item);
+  const rt=details?.runtime||details?.episode_run_time?.[0];
+  renderTitleMeta([
+    yr(item),
+    rt?fmtRuntime(rt):'',
+    details?.number_of_seasons?`${details.number_of_seasons} Season${details.number_of_seasons!==1?'s':''}`:'',
+  ],'below-meta');
+  const g=document.getElementById('watch-genres');g.innerHTML='';
+  (details?.genres||[]).forEach(x=>{
+    const pill=document.createElement('span');pill.className='tp-genre-pill';pill.textContent=x.name;g.appendChild(pill);
+  });
+  document.getElementById('watch-overview').textContent=details?.overview||item.overview||'';
+  resetOverviewToggle('watch-overview','watch-more');
+}
+async function showBrowseSeason(sNum){
+  const item=S.playerItem;if(!item)return;
+  S.browseSeason=sNum;
+  document.querySelectorAll('#watch-season-tabs .tp-season-pill').forEach(b=>b.classList.toggle('active',Number(b.dataset.season)===sNum));
+  const list=document.getElementById('watch-ep-list');
+  if(!S.playerSeasonData[item.id])S.playerSeasonData[item.id]={};
+  if(!S.playerSeasonData[item.id][sNum]){
+    list.innerHTML='<div class="ep-loading">Loading episodes…</div>';
+    const data=await A.season(item.id,sNum);
+    S.playerSeasonData[item.id][sNum]=data||{episodes:[]};
+  }
+  if(S.browseSeason!==sNum||S.playerItem?.id!==item.id)return; // the viewer moved on while it loaded
+  renderWatchEpisodes();
+}
+// Browsing another season never changes what is playing: "playing now" is
+// only ever the season and episode that are actually loaded in the player.
+function renderWatchEpisodes(){
+  const item=S.playerItem,list=document.getElementById('watch-ep-list');if(!item||!list)return;
+  const eps=S.playerSeasonData[item.id]?.[S.browseSeason]?.episodes||[];
+  list.innerHTML='';
+  eps.forEach(ep=>list.appendChild(makeEpisodeRow(item,S.browseSeason,ep,{
+    current:S.browseSeason===S.playerSeason&&ep.episode_number===S.playerEp,tag:'Playing',
+  })));
+}
+function buildWatchEpisodes(){
+  const sec=document.getElementById('watch-eps'),pills=document.getElementById('watch-season-tabs');
+  if(!sec||!pills)return;
+  sec.style.display='block';
+  pills.innerHTML='';
+  if(S.playerSeasons>1){
+    for(let n=1;n<=S.playerSeasons;n++){
+      const b=document.createElement('button');
+      b.className=`tp-season-pill${n===S.browseSeason?' active':''}`;
+      b.dataset.season=String(n);b.textContent=`Season ${n}`;
+      b.addEventListener('click',()=>{if(n!==S.browseSeason)showBrowseSeason(n);});
+      pills.appendChild(b);
+    }
+  }
+  showBrowseSeason(S.browseSeason);
+}
+
+let _cinema=lsGetRaw('wt_cinema')==='1',_cinemaBarTimer=0;
+function showCinemaBar(ms=3000){
+  const pg=document.getElementById('page-player');if(!pg||!_cinema)return;
+  pg.classList.add('show-bar');clearTimeout(_cinemaBarTimer);
+  if(ms)_cinemaBarTimer=setTimeout(()=>pg.classList.remove('show-bar'),ms);
+}
+function applyCinema(){
+  const pg=document.getElementById('page-player');if(!pg)return;
+  pg.classList.toggle('cinema',_cinema);
+  const b=document.getElementById('player-cine-btn');
+  if(b){b.setAttribute('aria-pressed',String(_cinema));b.title=_cinema?'Exit cinematic mode (T)':'Cinematic mode (T)';}
+  if(_cinema)showCinemaBar(3000);
+  else{clearTimeout(_cinemaBarTimer);pg.classList.remove('show-bar');}
+}
+function toggleCinema(){
+  _cinema=!_cinema;lsSetRaw('wt_cinema',_cinema?'1':'0');
+  applyCinema();
+  window.scrollTo({top:0,behavior:'smooth'}); // bring the player fully into view
+}
+function initCinema(){
+  document.getElementById('player-cine-btn')?.addEventListener('click',toggleCinema);
+  // The bar is hidden in cinematic mode. It comes back when the pointer reaches
+  // the top edge, when it is moved over the page around the video (a framed
+  // video swallows pointer events), or when a key is pressed.
+  document.querySelector('.cine-hot')?.addEventListener('pointerenter',()=>showCinemaBar(3000));
+  const bar=document.getElementById('player-topbar');
+  bar?.addEventListener('pointerenter',()=>showCinemaBar(0));    // stay while you are using it
+  bar?.addEventListener('pointerleave',()=>showCinemaBar(1200));
+  document.addEventListener('mousemove',()=>{if(_cinema&&S.page==='player')showCinemaBar(2500);},{passive:true});
+  document.addEventListener('keydown',()=>{if(_cinema&&S.page==='player')showCinemaBar(2500);});
+}
+
 async function openPlayer(item,type,season=1,ep=1,epName=''){
   // Show cinematic loader with title backdrop
   const loaderEl=showCinematicLoader();
@@ -1551,19 +1672,22 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
   updateCinematicLoader(20,`Loading ${ttl(item)}…`,bg);
 
   S.playerItem=item;S.playerType=type;S.playerSeason=season;S.playerEp=ep;
+  S.browseSeason=season;
   if(_livePos.key!==livePosKey())_livePos={key:'',t:0,d:0,lastSave:0};
   addHist({...item,media_type:type});
   setHash(type==='tv'?`/watch/tv/${item.id}/${season}/${ep}`:`/watch/movie/${item.id}`);
   goTo('player');
+  applyCinema();
 
-  document.getElementById('below-title').textContent=ttl(item);
-  document.getElementById('below-meta').textContent=type==='tv'
-    ?`Season ${season} · Episode ${ep}${epName?' — '+epName:''}`:yr(item);
+  setWatchHeader(item,type,season,ep,epName);
+  renderWatchInfo(item,type,null); // from the list item right away; details fill in below
 
   S.playerOpenTime=Date.now();
   updateCinematicLoader(50,'Fetching details…',bg);
   const details=await A.details(item.id,type);
   S.playerRuntime=(details?.runtime||details?.episode_run_time?.[0]||45)*60*1000;
+  if(S.playerItem!==item)return; // another title was opened while this one loaded
+  renderWatchInfo(item,type,details);
 
   updateCinematicLoader(80,'Starting stream…',bg);
   loadVidSrcWithServer(item.id,type,season,ep);
@@ -1574,13 +1698,15 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
   if(type==='tv'){
     S.playerSeasons=details?.number_of_seasons||S.playerSeasons||1;
     const data=await A.season(item.id,season);
+    if(S.playerItem!==item)return;
     S.playerEps=data?.episodes||[];
-    buildEpPanel();updateEpCounter();
+    if(!S.playerSeasonData[item.id])S.playerSeasonData[item.id]={};
+    if(data)S.playerSeasonData[item.id][season]=data;
+    buildWatchEpisodes();updateEpCounter();
     loadBelowContent(item,type,null);
   }else{
     S.playerEps=[];S.playerSeasons=0;
-    document.getElementById('pep-list').innerHTML='';
-    document.getElementById('pep-season-tabs').innerHTML='';
+    const sec=document.getElementById('watch-eps');if(sec)sec.style.display='none';
     loadBelowContent(item,type,details);
   }
 
@@ -1602,6 +1728,8 @@ function loadVidSrcWithServer(id,type,season,ep,forceId){
   const kind=providerKind(item,type);
   const srv=(forceId&&SERVERS.find(x=>x.id===forceId))||activeProvider(item,type);
   S.activeSrc=srv.id;
+  const lab=document.getElementById('player-loader-label');
+  if(lab)lab.textContent=`Loading from ${srv.label}…`;
   buildServerSwitcher();
   const token=++_loadToken;
   const ctx={item,type,season,ep,kind,srv,resumeAt:resumePoint(item,season,ep)};
@@ -1660,7 +1788,40 @@ function hideSourceHint(){
   document.getElementById('player-source-hint')?.classList.remove('show');
 }
 
+/* ── Fullscreen ──
+   Requested on the wrapper from Watchy's own click, so it does not depend on
+   the embedded player's fullscreen button working inside a cross-origin
+   iframe. Prefixed forms are for older Safari; iPhone Safari supports
+   fullscreen only for <video>, so there the button stays hidden. */
+const fsElement=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
+function exitFs(){
+  try{const f=document.exitFullscreen||document.webkitExitFullscreen;if(f)Promise.resolve(f.call(document)).catch(()=>{});}catch(_){}
+}
+function toggleFullscreen(){
+  const wrap=document.getElementById('player-embed-wrap');if(!wrap)return;
+  if(fsElement()){exitFs();return;}
+  const req=wrap.requestFullscreen||wrap.webkitRequestFullscreen;
+  if(!req){showToast('Fullscreen is not supported in this browser');return;}
+  try{Promise.resolve(req.call(wrap)).catch(()=>showToast("Couldn't enter fullscreen"));}
+  catch(_){showToast("Couldn't enter fullscreen");}
+}
+function syncFullscreenUi(){
+  const btn=document.getElementById('player-fs-btn');if(!btn)return;
+  const on=!!fsElement();
+  btn.setAttribute('aria-pressed',String(on));
+  btn.title=on?'Exit fullscreen (F)':'Fullscreen (F)';
+  btn.setAttribute('aria-label',on?'Exit fullscreen':'Fullscreen');
+}
+function initPlayerFullscreen(){
+  const btn=document.getElementById('player-fs-btn');if(!btn)return;
+  btn.hidden=!(document.fullscreenEnabled||document.webkitFullscreenEnabled);
+  btn.addEventListener('click',toggleFullscreen);
+  document.addEventListener('fullscreenchange',syncFullscreenUi);
+  document.addEventListener('webkitfullscreenchange',syncFullscreenUi);
+}
+
 function stopPlayer(){
+  if(fsElement())exitFs(); // leaving the player must never leave the screen fullscreen
   if(S.playerItem){
     let pct=0;
     if(_livePos.key===livePosKey()&&_livePos.d>0)pct=Math.round((_livePos.t/_livePos.d)*100); // real position
@@ -1669,7 +1830,7 @@ function stopPlayer(){
   }
   const iframe=document.getElementById('vidsrc-iframe');
   if(iframe){iframe.src='about:blank';iframe.remove();}
-  document.getElementById('player-ep-panel')?.classList.remove('open');
+  clearTimeout(_cinemaBarTimer);document.getElementById('page-player')?.classList.remove('show-bar');
   hideSourceHint();
   S.playerSeasons=0;S.playerOpenTime=0;
 }
@@ -1765,64 +1926,38 @@ function toggleSrcPanel(){
 /* ══════════════════════════════════════════
    EPISODE PANEL IN PLAYER
    ══════════════════════════════════════════ */
-function buildEpPanel(){
-  const pepList=document.getElementById('pep-list');
-  const pepTabs=document.getElementById('pep-season-tabs');
-  if(!pepList)return;
-  if(pepTabs&&S.playerSeasons>1){
-    pepTabs.innerHTML='';
-    for(let s=1;s<=Math.min(S.playerSeasons,8);s++){
-      const btn=document.createElement('button');
-      btn.className=`pep-season-btn${s===S.playerSeason?' active':''}`;btn.textContent=`S${s}`;
-      btn.addEventListener('click',()=>{
-        document.querySelectorAll('.pep-season-btn').forEach(b=>b.classList.remove('active'));
-        btn.classList.add('active');S.playerSeason=s;
-        A.season(S.playerItem.id,s).then(d=>{S.playerEps=d?.episodes||[];renderEps(pepList);});
-      });
-      pepTabs.appendChild(btn);
-    }
-  }else if(pepTabs)pepTabs.innerHTML='';
-  renderEps(pepList);
-}
-function renderEps(container){
-  container.querySelectorAll('.pep-ep-row').forEach(r=>r.remove());
-  S.playerEps.forEach(ep=>{
-    const pct=getProg(S.playerItem.id,'tv',S.playerSeason,ep.episode_number);
-    const still=ep.still_path?`${TMDB_IMG}/w300${ep.still_path}`:null;
-    const isNow=ep.episode_number===S.playerEp;
-    const row=document.createElement('div');row.className=`pep-ep-row${isNow?' active':''}`;
-    row.innerHTML=`
-      ${still?`<img class="pep-thumb" src="${still}" alt="" loading="lazy">`:`<div class="pep-thumb pep-thumb-ph"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m7 8 4 3-4 3V8z"/></svg></div>`}
-      <div class="pep-info">
-        <div class="pep-ep-title">E${ep.episode_number} — ${ep.name||'Episode '+ep.episode_number}</div>
-        ${ep.runtime?`<div class="pep-ep-dur">${ep.runtime}m</div>`:''}
-        ${pct>0?`<div class="pep-prog"><div class="pep-prog-fill" style="width:${pct}%"></div></div>`:''}
-      </div>
-      ${isNow?'<span class="pep-now">Now</span>':''}`;
-    row.addEventListener('click',()=>{
-      document.getElementById('player-ep-panel')?.classList.remove('open');
-      openPlayer(S.playerItem,'tv',S.playerSeason,ep.episode_number,ep.name);
-    });
-    container.appendChild(row);
-  });
-}
-function nextEpisode(){
+// Previous / next episode. Running off the end of a season carries on into
+// the neighbouring season instead of stopping.
+let _stepping=false;
+async function stepEpisode(dir){
+  if(S.playerType!=='tv'||_stepping||!S.playerItem)return;
   const cur=S.playerEps.findIndex(e=>e.episode_number===S.playerEp);
-  if(S.playerType!=='tv'||cur===-1||cur===S.playerEps.length-1){showToast('End of season');return;}
-  const next=S.playerEps[cur+1];openPlayer(S.playerItem,'tv',S.playerSeason,next.episode_number,next.name);
+  const inSeason=cur===-1?null:S.playerEps[cur+dir];
+  if(inSeason){openPlayer(S.playerItem,'tv',S.playerSeason,inSeason.episode_number,inSeason.name);return;}
+  const target=S.playerSeason+dir;
+  if(target<1||target>S.playerSeasons){showToast(dir>0?'That was the last episode':'This is the first episode');return;}
+  _stepping=true;
+  try{
+    const data=await A.season(S.playerItem.id,target);
+    const eps=data?.episodes||[];
+    const pick=dir>0?eps[0]:eps[eps.length-1];
+    if(!pick){showToast('No episodes found');return;}
+    openPlayer(S.playerItem,'tv',target,pick.episode_number,pick.name);
+  }finally{_stepping=false;}
 }
-function prevEpisode(){
-  const cur=S.playerEps.findIndex(e=>e.episode_number===S.playerEp);
-  if(S.playerType!=='tv'||cur<=0){showToast('Already at first episode');return;}
-  const prev=S.playerEps[cur-1];openPlayer(S.playerItem,'tv',S.playerSeason,prev.episode_number,prev.name);
-}
+function nextEpisode(){return stepEpisode(1);}
+function prevEpisode(){return stepEpisode(-1);}
 function updateEpCounter(){
   const el=document.getElementById('player-ep-counter');if(!el||!S.playerEps.length)return;
   const cur=S.playerEps.findIndex(e=>e.episode_number===S.playerEp);
   const ep=S.playerEps[cur];
-  el.textContent=ep?`S${S.playerSeason} · E${ep.episode_number}${ep.name?' — '+ep.name.slice(0,28):''}`:`S${S.playerSeason} · E${S.playerEp}`;
-  if(document.getElementById('player-prev-btn'))document.getElementById('player-prev-btn').disabled=cur<=0;
-  if(document.getElementById('player-next-btn'))document.getElementById('player-next-btn').disabled=cur>=S.playerEps.length-1;
+  el.textContent=ep?`S${S.playerSeason} · E${ep.episode_number}${ep.name?' — '+ep.name.slice(0,40):''}`:`S${S.playerSeason} · E${S.playerEp}`;
+  const sub=document.getElementById('pt-now-sub');
+  if(sub&&S.playerType==='tv')sub.textContent=el.textContent; // the real episode name once it is known
+  const first=cur<=0&&S.playerSeason<=1,last=cur>=S.playerEps.length-1&&S.playerSeason>=S.playerSeasons;
+  const p=document.getElementById('player-prev-btn'),n=document.getElementById('player-next-btn');
+  if(p)p.disabled=first;
+  if(n)n.disabled=last;
 }
 
 /* ── Keyboard ── */
@@ -1890,9 +2025,13 @@ function initKeyboard(){
     if(S.page==='player'){
       if(e.code==='KeyN'){e.preventDefault();nextEpisode();}
       if(e.code==='KeyP'){e.preventDefault();prevEpisode();}
+      if(e.code==='KeyF'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();toggleFullscreen();}
+      if(e.code==='KeyT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();toggleCinema();}
       if(e.code==='Escape'){
-        document.getElementById('player-ep-panel')?.classList.remove('open');
-        closeSrcPanel();
+        // Esc closes the innermost thing first: the source panel, then cinematic
+        // mode. (In real fullscreen the browser handles Esc itself.)
+        if(document.getElementById('src-panel')?.classList.contains('open'))closeSrcPanel();
+        else if(_cinema&&!fsElement())toggleCinema();
       }
     }
     if(e.key==='Escape'&&S.searchOpen)closeSearch();
@@ -2137,10 +2276,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Player
   document.getElementById('player-back-btn').addEventListener('click',()=>{stopPlayer();goTo(S.lastPage||'home',false,true);});
   document.getElementById('player-logo-btn')?.addEventListener('click',()=>{stopPlayer();goTo('home');});
-  document.getElementById('player-ep-toggle')?.addEventListener('click',()=>document.getElementById('player-ep-panel')?.classList.toggle('open'));
+  document.getElementById('player-ep-toggle')?.addEventListener('click',()=>document.getElementById('watch-eps')?.scrollIntoView({behavior:'smooth',block:'start'}));
   document.getElementById('player-prev-btn')?.addEventListener('click',prevEpisode);
   document.getElementById('player-next-btn')?.addEventListener('click',nextEpisode);
-  document.getElementById('pep-close')?.addEventListener('click',()=>document.getElementById('player-ep-panel')?.classList.remove('open'));
   document.getElementById('player-source-hint-btn')?.addEventListener('click',()=>{hideSourceHint();openSrcPanel();});
   document.getElementById('player-source-hint-close')?.addEventListener('click',hideSourceHint);
   // Title page
@@ -2178,7 +2316,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     }).observe(srcPanel,{attributes:true,attributeFilter:['class']});
   }
   // Setup
-  setupGenres();initKeyboard();initOverviewToggle();initRipple();initRailArrows();initLogoSpotlight();
+  setupGenres();initKeyboard();bindOverviewToggle('tp-overview','tp-more');bindOverviewToggle('watch-overview','watch-more');initRipple();initRailArrows();initLogoSpotlight();initPlayerFullscreen();initCinema();
   document.fonts?.ready.then(moveNavUnderline);
   window.addEventListener('resize',moveNavUnderline);
   // The links are centered, so they shift sideways whenever the page

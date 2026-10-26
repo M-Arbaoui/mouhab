@@ -1260,41 +1260,46 @@ select{appearance:none;-webkit-appearance:none}
 /* ════════════════════════════════
    PLAYER
 ════════════════════════════════ */
-#page-player{display:none}
+#page-player{display:none;position:relative;min-height:100vh;overflow-x:clip;background:var(--bg);transition:background .45s ease}
 #page-player.active{display:block}
+
+/* ── Top bar: where you are, and the three things you can do to the player ── */
 .player-topbar{
-  display:flex;align-items:center;gap:12px;
-  padding:0 20px;height:50px;flex-shrink:0;
-  background:rgba(9,9,11,.95);border-bottom:1px solid var(--border);
-  position:relative;z-index:30;
+  display:grid;grid-template-columns:1fr minmax(0,1.5fr) 1fr;align-items:center;gap:12px;
+  height:54px;padding:0 20px;position:relative;z-index:30;
+  background:rgba(9,9,11,.92);border-bottom:1px solid var(--border);
+  transition:opacity .3s ease,background .3s ease;
 }
-.player-topbar-logo{font-family:var(--font-d);font-size:20px;font-weight:300;color:var(--text);transition:opacity .18s}
+.pt-left{display:flex;align-items:center;gap:6px;min-width:0}
+.player-topbar-logo{font-family:var(--font-d);font-size:20px;font-weight:300;color:var(--text);transition:opacity .18s;padding:0 6px}
 .player-topbar-logo:hover{opacity:.75}
-.player-topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
-.src-toggle-btn{
-  display:flex;align-items:center;gap:6px;
-  padding:6px 12px;border-radius:var(--r);
-  background:var(--surface2);border:1px solid var(--border2);
-  color:var(--text2);font-size:12px;
-  transition:border-color .18s,color .18s,background .18s;
-  position:relative;
+.pt-now{display:flex;flex-direction:column;align-items:center;min-width:0;text-align:center;line-height:1.3}
+.pt-now-title{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--font-d);font-size:18px;font-weight:400;color:var(--text);
 }
-.src-toggle-btn:hover{border-color:rgba(201,169,110,.4);color:var(--gold)}
+.pt-now-sub{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text3)}
+.player-topbar-right{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+/* One pill style for every control in the bar. */
+.pb{
+  display:inline-flex;align-items:center;gap:7px;position:relative;
+  height:32px;padding:0 13px;border-radius:999px;
+  border:1px solid var(--border2);background:rgba(255,255,255,.035);
+  color:var(--text2);font-size:12px;white-space:nowrap;
+  transition:border-color .2s ease,color .2s ease,background .2s ease;
+}
+.pb:hover{color:var(--gold);border-color:rgba(201,169,110,.4)}
+.pb[aria-pressed="true"]{color:var(--gold);border-color:rgba(201,169,110,.45);background:var(--gold-dim)}
+.pb:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.pb[hidden]{display:none}
 .src-active-dot{
   width:6px;height:6px;border-radius:50%;background:var(--score-good);
   display:inline-block;flex-shrink:0;
 }
-.player-back-btn{
-  display:flex;align-items:center;gap:6px;
-  padding:7px 14px;border-radius:var(--r);
-  border:1px solid var(--border);color:var(--text2);
-  font-size:12px;transition:border-color .18s,color .18s;
-}
-.player-back-btn:hover{border-color:var(--border2);color:var(--text)}
 
 /* Source panel — tab style */
 .src-panel{
-  position:absolute;top:50px;right:16px;z-index:100;
+  position:absolute;top:60px;right:16px;z-index:100;
   width:min(440px,calc(100vw - 32px));
   background:rgba(9,9,11,.98);backdrop-filter:blur(28px);
   border:1px solid var(--border2);border-radius:var(--r-lg);
@@ -1373,14 +1378,66 @@ select{appearance:none;-webkit-appearance:none}
 .src-sub-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .src-sub-note{font-size:11px;line-height:1.5;color:var(--text3)}
 
-/* Embed wrap */
-.player-embed-wrap{
-  position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;
+/* ── Stage: the player, with a soft glow of the title's own artwork behind it ── */
+.watch-stage{position:relative;max-width:1360px;margin:0 auto;padding:22px 60px 0}
+.watch-ambient{
+  position:absolute;left:50%;top:0;width:100vw;height:100%;transform:translateX(-50%);
+  overflow:hidden;pointer-events:none;z-index:0;opacity:.55;transition:opacity .5s ease;
 }
+.watch-ambient::before{
+  content:'';position:absolute;inset:-40px;
+  background:var(--amb,none) center/cover no-repeat;
+  filter:blur(48px) saturate(1.3);opacity:.5;
+}
+.watch-ambient::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(to bottom,rgba(9,9,11,.15) 0%,var(--bg) 100%);
+}
+.player-embed-wrap{
+  position:relative;z-index:1;width:100%;aspect-ratio:16/9;
+  max-height:calc(100vh - 54px - 44px);
+  background:#000;overflow:hidden;
+  border-radius:14px;border:1px solid rgba(201,169,110,.22);
+  box-shadow:0 28px 80px rgba(12,9,5,.7);
+  transition:border-radius .4s var(--ease),border-color .4s ease,box-shadow .4s ease;
+}
+/* Watchy's own fullscreen: the whole wrapper (iframe + loader + messages) goes
+   fullscreen, so it works even when the embedded player's own fullscreen
+   button can't. The aspect-ratio and max-height must be released, or the
+   wrapper would be squeezed inside the screen. Separate rules on purpose: a
+   selector list containing an unknown prefixed selector is dropped whole. */
+.player-embed-wrap:fullscreen{aspect-ratio:auto;max-height:none;background:#000;border:0;border-radius:0;box-shadow:none}
+.player-embed-wrap:-webkit-full-screen{aspect-ratio:auto;max-height:none;background:#000;border:0;border-radius:0;box-shadow:none}
+
+/* ── Cinematic mode: the lights go down. The player takes the full width of the
+   window, everything else steps back, and the bar only appears when asked for.
+   Desktop only — on a phone the player is already edge to edge. ── */
+.cine-hot{display:none}
+@media(min-width:801px){
+  #page-player.cinema{background:#000}
+  #page-player.cinema .watch-stage{max-width:none;padding:0}
+  #page-player.cinema .player-embed-wrap{
+    aspect-ratio:auto;max-height:none;height:min(56.25vw,100vh);
+    border-radius:0;border-color:transparent;box-shadow:none;
+  }
+  #page-player.cinema .watch-ambient{opacity:.9}
+  #page-player.cinema .cine-hot{display:block;position:absolute;top:0;left:0;right:0;height:12px;z-index:41}
+  #page-player.cinema .player-topbar{
+    position:absolute;top:0;left:0;right:0;z-index:40;
+    background:linear-gradient(to bottom,rgba(0,0,0,.78),rgba(0,0,0,0));
+    border-bottom-color:transparent;opacity:0;pointer-events:none;
+  }
+  #page-player.cinema.show-bar .player-topbar,
+  #page-player.cinema .player-topbar:focus-within{opacity:1;pointer-events:auto}
+  #page-player.cinema .watch-col{opacity:.5;transition:opacity .35s ease}
+  #page-player.cinema .watch-col:hover,
+  #page-player.cinema .watch-col:focus-within{opacity:1}
+}
+
 .player-loader{
   position:absolute;inset:0;z-index:5;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(9,9,11,.8);backdrop-filter:blur(4px);
+  display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;
+  background:linear-gradient(rgba(9,9,11,.78),rgba(9,9,11,.92)),var(--amb,none) center/cover no-repeat,#09090b;
   opacity:0;pointer-events:none;transition:opacity .25s;
 }
 .player-loader.on{opacity:1}
@@ -1389,6 +1446,7 @@ select{appearance:none;-webkit-appearance:none}
   border:2px solid rgba(201,169,110,.14);border-top-color:var(--gold);
   animation:spin .9s linear infinite;
 }
+.player-loader-label{font-size:12px;letter-spacing:.06em;color:var(--text2)}
 .player-source-hint{
   position:absolute;left:50%;bottom:24px;z-index:6;
   transform:translate(-50%,12px);
@@ -1419,97 +1477,31 @@ select{appearance:none;-webkit-appearance:none}
   .player-source-hint{white-space:normal;max-width:calc(100vw - 32px);font-size:12px;padding:10px 10px 10px 14px}
 }
 
-/* Episode nav bar */
-.player-ep-nav{
-  display:none;align-items:center;gap:0;
-  background:rgba(9,9,11,.95);border-top:1px solid var(--border);
-  padding:0 16px;height:46px;flex-shrink:0;z-index:10;
+/* ── Under the player ── */
+.watch-col{max-width:1360px;margin:0 auto}
+.player-ep-nav{display:none;align-items:center;gap:10px;padding:18px 60px 0}
+.pep-nav-btn,.pep-nav-eps-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  height:36px;padding:0 16px;border-radius:999px;
+  border:1px solid var(--border2);background:rgba(255,255,255,.035);
+  font-size:12.5px;font-weight:500;color:var(--text2);flex-shrink:0;
+  transition:border-color .2s ease,color .2s ease,background .2s ease;
 }
-.pep-nav-btn{
-  display:flex;align-items:center;gap:5px;padding:8px 14px;
-  font-size:12px;font-weight:500;color:var(--text2);border-radius:var(--r);
-  transition:background .18s,color .18s;flex-shrink:0;
-}
-.pep-nav-btn:hover{background:var(--surface2);color:var(--text)}
-.pep-nav-btn:disabled{opacity:.3;pointer-events:none}
+.pep-nav-btn:hover,.pep-nav-eps-btn:hover{border-color:rgba(201,169,110,.4);color:var(--gold);background:var(--gold-dim)}
+.pep-nav-btn:disabled{opacity:.35;pointer-events:none}
+.pep-nav-btn:focus-visible,.pep-nav-eps-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .player-ep-counter{
-  flex:1;text-align:center;font-size:12px;color:var(--text2);
+  flex:1;text-align:center;font-size:13px;color:var(--text2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px;
 }
-.pep-nav-eps-btn{
-  display:flex;align-items:center;gap:6px;padding:6px 12px;
-  font-size:12px;font-weight:500;color:var(--text2);
-  border:1px solid var(--border);border-radius:var(--r);margin-left:8px;
-  transition:border-color .18s,color .18s,background .18s;flex-shrink:0;
+.below-player{padding:26px 0 90px}
+.watch-info{padding:0 60px;margin-bottom:38px;display:flex;flex-direction:column}
+.watch-badges{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.watch-title{
+  font-family:var(--font-d);font-size:clamp(28px,3.6vw,46px);
+  font-weight:300;line-height:1.08;letter-spacing:-.015em;color:var(--text);margin-bottom:10px;
 }
-.pep-nav-eps-btn:hover{border-color:rgba(201,169,110,.4);color:var(--gold);background:var(--gold-dim)}
-
-/* Episode panel */
-.player-ep-panel{
-  position:absolute;left:0;right:0;bottom:0;z-index:50;
-  background:rgba(9,9,11,.98);backdrop-filter:blur(24px);
-  border-top:1px solid var(--border2);border-radius:var(--r-lg) var(--r-lg) 0 0;
-  max-height:72vh;display:flex;flex-direction:column;
-  transform:translateY(100%);transition:transform .32s var(--ease);
-}
-.player-ep-panel.open{transform:translateY(0)}
-@media(min-width:801px){
-  .player-ep-panel{
-    left:auto;right:20px;bottom:56px;width:360px;max-height:74vh;
-    border-radius:var(--r-lg);border:1px solid var(--border2);
-    transform:scale(.94) translateY(12px);opacity:0;
-    transition:transform .28s var(--ease),opacity .28s var(--ease);
-  }
-  .player-ep-panel.open{transform:scale(1) translateY(0);opacity:1}
-}
-.pep-handle{width:36px;height:3px;border-radius:2px;background:var(--border2);margin:10px auto 0;flex-shrink:0}
-@media(min-width:801px){.pep-handle{display:none}}
-.pep-head{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;
-}
-.pep-title{font-size:13px;font-weight:500;color:var(--text2)}
-#pep-season-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
-.pep-season-btn{
-  padding:4px 10px;border-radius:6px;
-  border:1px solid var(--border);font-size:11px;color:var(--text3);
-  transition:border-color .18s,color .18s,background .18s;
-}
-.pep-season-btn:hover{border-color:var(--border2);color:var(--text2);background:var(--surface2)}
-.pep-season-btn.active{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
-.pep-close{
-  width:26px;height:26px;border-radius:6px;margin-left:auto;
-  display:flex;align-items:center;justify-content:center;
-  color:var(--text3);font-size:13px;transition:color .15s,background .15s;
-}
-.pep-close:hover{color:var(--text);background:rgba(255,255,255,.07)}
-.pep-list{overflow-y:auto;flex:1;padding:8px;scrollbar-width:none}
-.pep-list::-webkit-scrollbar{display:none}
-.pep-ep-row{
-  display:flex;align-items:center;gap:10px;padding:8px 10px;
-  border-radius:var(--r);cursor:pointer;transition:background .15s;
-}
-.pep-ep-row:hover{background:var(--surface2)}
-.pep-ep-row.active{background:var(--gold-dim)}
-.pep-thumb{
-  width:80px;height:46px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--card);
-}
-.pep-thumb-ph{
-  width:80px;height:46px;border-radius:6px;flex-shrink:0;
-  background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--text3);
-}
-.pep-info{flex:1;min-width:0}
-.pep-ep-title{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pep-ep-dur{font-size:11px;color:var(--text3);margin-top:2px}
-.pep-prog{height:2px;background:rgba(255,255,255,.08);border-radius:1px;overflow:hidden;margin-top:4px}
-.pep-prog-fill{height:100%;background:var(--gold)}
-.pep-now{font-size:10px;color:var(--gold);flex-shrink:0;letter-spacing:.06em}
-
-/* Below player */
-.below-player{padding:24px 60px 80px;background:var(--bg)}
-.below-row{margin-bottom:24px}
-.below-title{font-family:var(--font-d);font-size:22px;font-weight:300;color:var(--text)}
-.below-meta{font-size:13px;color:var(--text3);margin-top:4px}
+.watch-eps{padding:0 60px}
 .below-section{margin-bottom:32px}
 
 /* ════════════════════════════════
@@ -1597,6 +1589,19 @@ select{appearance:none;-webkit-appearance:none}
 ════════════════════════════════ */
 @media(max-width:800px){
   :root{--nav-h:52px}
+  /* Watch page */
+  .player-topbar{grid-template-columns:auto minmax(0,1fr) auto;padding:0 10px;gap:8px;height:50px}
+  .pb{padding:0;width:34px;justify-content:center}
+  .pb-label{display:none}
+  .player-cine-btn{display:none}
+  .player-topbar-logo{display:none}
+  .watch-stage{padding:0}
+  .player-embed-wrap{border-radius:0;border-left:0;border-right:0;max-height:none}
+  .src-panel{top:56px}
+  .player-ep-nav{padding:14px 16px 0;gap:6px}
+  .pep-nav-btn,.pep-nav-eps-btn{padding:0 12px}
+  .watch-info,.watch-eps{padding:0 16px}
+  .player-ep-counter{font-size:12px}
   .nav{padding:0 16px;grid-template-columns:auto 1fr auto}
   .nav-links{display:none}
   .nav-search-label{display:none}
