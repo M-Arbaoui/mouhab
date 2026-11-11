@@ -1776,3 +1776,76 @@ select{appearance:none;-webkit-appearance:none}
 .to-top:hover{border-color:var(--gold)}
 .to-top:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(max-width:800px){.to-top{right:16px;bottom:88px}}
+
+/* ── Cinematic hero system: Home + Movies + Series + Anime ── */
+#hero{
+  min-height:min(82svh,760px);padding:var(--nav-h) 0 34px;justify-content:center;
+  background:radial-gradient(ellipse 55% 70% at 78% 48%,rgba(201,169,110,.055),transparent 72%),var(--bg);
+}
+.hero-bg{
+  inset:50% 6vw auto auto;width:min(43vw,620px);height:min(62vh,520px);
+  border:1px solid rgba(201,169,110,.24);border-radius:22px;
+  box-shadow:0 28px 80px rgba(0,0,0,.38);background-position:center;overflow:hidden;
+  transform:translateY(-50%);
+}
+.hero-bg.visible{animation:heroCardZoom 16s ease-out forwards}
+@keyframes heroCardZoom{from{transform:translateY(-50%) scale(1)}to{transform:translateY(-50%) scale(1.035)}}
+.hero-bg::after{
+  border-radius:inherit;
+  background:linear-gradient(to top,rgba(9,9,11,.2),transparent 42%);
+}
+.hero-ambient{display:none}
+.hero-content{max-width:min(54%,760px);padding:0 0 0 60px}
+.hero-title{font-size:clamp(42px,5vw,68px);max-width:680px}
+.hero-overview{max-width:520px}
+.hero-nav{padding:26px 0 0 60px}
+
+/* Catalog spotlight: copy left, framed artwork right. */
+.cat-spot{
+  min-height:min(50vh,500px);display:flex;align-items:center;
+  background:radial-gradient(ellipse 50% 80% at 80% 50%,rgba(201,169,110,.045),transparent 72%),var(--bg);
+}
+.cat-spot.ready{background:radial-gradient(ellipse 50% 80% at 80% 50%,rgba(201,169,110,.045),transparent 72%),var(--bg)}
+.cat-spot-bgs{
+  inset:50% 5vw auto auto;width:min(42vw,560px);height:min(34vh,330px);
+  transform:translateY(-50%);border:1px solid rgba(201,169,110,.24);
+  border-radius:20px;box-shadow:0 24px 68px rgba(0,0,0,.36);overflow:hidden;
+}
+.cat-spot-bg{background-position:center center;background-size:cover}
+.cat-spot-bgs::after{background:linear-gradient(135deg,rgba(255,255,255,.035),transparent 48%)}
+.cat-spot-body{width:58%;max-width:760px;padding:54px 0 48px 60px}
+.cat-spot-title{font-size:clamp(32px,3.7vw,48px);max-width:600px}
+.cat-spot-ov{max-width:520px}
+.cat-spot-dots{margin-top:20px}
+.cat-head{padding-top:20px}
+
+/* Mobile: artwork first, then readable copy and controls. */
+@media(max-width:800px){
+  #hero{min-height:0;padding:calc(var(--nav-h) + 18px) 0 32px;justify-content:flex-start}
+  .hero-bg{
+    inset:calc(var(--nav-h) + 18px) 16px auto;width:auto;
+    height:clamp(190px,48vw,280px);transform:none;border-radius:16px;
+  }
+  .hero-bg.visible{animation:heroCardZoomMobile 16s ease-out forwards}
+  @keyframes heroCardZoomMobile{from{transform:scale(1)}to{transform:scale(1.025)}}
+  .hero-content{
+    max-width:none;padding:calc(var(--nav-h) + clamp(190px,48vw,280px) + 44px) 20px 0;
+  }
+  .hero-title{font-size:clamp(32px,8vw,44px)}
+  .hero-overview{font-size:13.5px;line-height:1.6;margin-bottom:18px}
+  .hero-nav{padding:20px 20px 0}
+  .cat-spot{min-height:0;display:flex;flex-direction:column;align-items:stretch}
+  .cat-spot-bgs{
+    position:relative;inset:auto;transform:none;width:calc(100% - 32px);
+    height:clamp(190px,52vw,280px);margin:calc(var(--nav-h) + 16px) 16px 0;
+    border-radius:16px;
+  }
+  .cat-spot-body{width:100%;max-width:none;padding:22px 20px 26px}
+  .cat-spot-title{font-size:clamp(30px,8vw,42px)}
+  .cat-spot-ov{font-size:13px;max-width:none}
+  .cat-spot-dots{margin-top:16px}
+  .cat-head{padding:16px 20px 0}
+}
+@media(prefers-reduced-motion:reduce){
+  .hero-bg.visible,.cat-spot-bg.visible{animation:none}
+}
