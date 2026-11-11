@@ -40,7 +40,7 @@ test('root service worker precaches the assets actually loaded by the production
   assert.doesNotMatch(html, /maximum-scale\s*=/i);
 
   for (const asset of [
-    'index.html', 'css/style.min.css', 'js/app.min.js',
+    'index.html', 'css/style.min.css', 'css/platform-redesign.css', 'js/app.min.js', 'js/catalog-glow.js',
     'manifest.json', 'og-image.png', 'icon-192.png', 'icon-512.png',
   ]) {
     assert.ok(worker.includes(`'./${asset}'`), `service worker should precache ${asset}`);
@@ -50,7 +50,7 @@ test('root service worker precaches the assets actually loaded by the production
 
 test('service worker uses separate caches and never handles known streaming embeds', () => {
   const worker = read('sw.js');
-  assert.match(worker, /watchy-shell-v6/);
+  assert.match(worker, /watchy-shell-v7/);
   assert.match(worker, /watchy-api-v6/);
   assert.match(worker, /watchy-img-v6/);
   assert.match(worker, /api\.themoviedb\.org/);
