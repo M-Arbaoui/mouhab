@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const CACHE = 'watchy-shell-v6';
+const CACHE = 'watchy-shell-v7';
 const API_CACHE = 'watchy-api-v6';
 const IMG_CACHE = 'watchy-img-v6';
 
@@ -12,6 +12,8 @@ const SHELL = [
   './',
   './index.html',
   './css/style.min.css',
+  './css/platform-redesign.css',
+  './js/catalog-glow.js',
   './js/app.min.js',
   './manifest.json',
   './og-image.png',
