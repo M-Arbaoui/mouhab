@@ -1,0 +1,25 @@
+name: Watchy checks
+
+on:
+  push:
+    branches: [master, "fix/**"]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check js/app.js
+          node --check js/app.min.js
+          node --check sw.js
+      - name: Run test suite
+        run: node --test tests/*.test.js
