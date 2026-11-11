@@ -56,10 +56,10 @@
       "icons": [{"src": "icon-192.png", "sizes": "192x192"}]
     },
     {
-      "name": "Discover",
-      "short_name": "Discover",
-      "description": "Discover new films and series",
-      "url": "./#/discover",
+      "name": "Anime",
+      "short_name": "Anime",
+      "description": "Browse anime series and films",
+      "url": "./#/anime",
       "icons": [{"src": "icon-192.png", "sizes": "192x192"}]
     },
     {
