@@ -1849,3 +1849,52 @@ select{appearance:none;-webkit-appearance:none}
 @media(prefers-reduced-motion:reduce){
   .hero-bg.visible,.cat-spot-bg.visible{animation:none}
 }
+
+
+/* Catalog spotlight: medium TV-style frame with artwork-matched ambient light. */
+.cat-spot{
+  min-height:430px;position:relative;isolation:isolate;overflow:hidden;
+  background:var(--bg);
+  --spot-rgb:201,169,110;
+}
+.cat-spot::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 42% 90% at 78% 50%,rgba(var(--spot-rgb),.19),transparent 76%);
+  opacity:.9;transition:background 1s ease,opacity .6s ease;
+}
+.cat-spot.ready{background:var(--bg)}
+.cat-spot-bgs{
+  inset:50% 6vw auto auto;width:min(38vw,470px);height:min(27vw,265px);
+  transform:translateY(-50%);border:1px solid rgba(var(--spot-rgb),.55);
+  border-radius:18px;box-shadow:0 0 34px rgba(var(--spot-rgb),.24),0 0 90px rgba(var(--spot-rgb),.14),0 22px 64px rgba(0,0,0,.48);
+  overflow:hidden;transition:border-color .8s ease,box-shadow .8s ease;
+}
+.cat-spot-bg{background-position:center center;background-size:cover}
+.cat-spot-bgs::after{
+  background:linear-gradient(135deg,rgba(255,255,255,.07),transparent 48%);
+}
+.cat-spot-body{width:59%;max-width:720px;padding:48px 0 42px 60px}
+.cat-spot-title{font-size:clamp(32px,3.5vw,46px);max-width:560px}
+.cat-spot-ov{max-width:500px}
+.cat-spot-dots{margin-top:18px}
+.cat-spot.ready .cat-spot-bgs{animation:tvFrameIn .7s cubic-bezier(.2,.7,.2,1) both}
+@keyframes tvFrameIn{
+  from{opacity:0;transform:translate(12px,-50%) scale(.975)}
+  to{opacity:1;transform:translate(0,-50%) scale(1)}
+}
+@media(max-width:800px){
+  .cat-spot{min-height:0}
+  .cat-spot::before{
+    background:radial-gradient(ellipse 90% 55% at 50% 30%,rgba(var(--spot-rgb),.2),transparent 78%);
+  }
+  .cat-spot-bgs{
+    width:calc(100% - 40px);height:clamp(190px,54vw,270px);
+    margin:calc(var(--nav-h) + 16px) 20px 0;border-radius:15px;
+    box-shadow:0 0 28px rgba(var(--spot-rgb),.25),0 0 72px rgba(var(--spot-rgb),.13),0 18px 44px rgba(0,0,0,.42);
+  }
+  .cat-spot-body{width:100%;max-width:none;padding:22px 20px 26px}
+  .cat-spot-title{font-size:clamp(30px,8vw,42px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .cat-spot.ready .cat-spot-bgs{animation:none}
+}
