@@ -69,7 +69,7 @@ test('Anime is a first-class catalogue page and replaces Discover', () => {
   assert.match(html, /data-page="anime"/);
   assert.match(html, /id="page-anime"/);
   assert.match(html, /id="anime-grid"/);
-  assert.match(app, /anime:\s*\{type:'tv'/);
+  assert.match(app, /anime:\s*\{type:'both'/);
   assert.match(app, /animeTV/);
   assert.ok(manifest.shortcuts.some((shortcut) => shortcut.url === './#/anime'));
   assert.ok(!manifest.shortcuts.some((shortcut) => shortcut.url === './#/discover'));
