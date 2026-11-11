@@ -537,6 +537,14 @@
 
 <div class="toast" id="toast"></div>
 <script src="js/app.min.js"></script>
-<script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
+<script>
+  // Load Vercel Analytics only on the canonical production deployment.
+  if (location.hostname === 'mouhab.vercel.app') {
+    const analytics = document.createElement('script');
+    analytics.defer = true;
+    analytics.src = 'https://cdn.vercel-insights.com/v1/script.js';
+    document.head.appendChild(analytics);
+  }
+</script>
 </body>
 </html>
