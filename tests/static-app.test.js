@@ -35,7 +35,9 @@ test('root service worker precaches the assets actually loaded by the production
   const worker = read('sw.js');
 
   assert.match(app, /serviceWorker\.register\('\.\/sw\.js'\)/);
-  assert.match(html, /href="css\/style\.min\.css"/);\n  assert.match(html, /href="css\/platform-redesign\.css"/);\n  assert.match(html, /src="js\/catalog-glow\.js"/);
+  assert.match(html, /href="css\/style\.min\.css"/);
+  assert.match(html, /href="css\/platform-redesign\.css"/);
+  assert.match(html, /src="js\/catalog-glow\.js"/);
   assert.match(html, /src="js\/app\.min\.js"/);
   assert.doesNotMatch(html, /maximum-scale\s*=/i);
 
