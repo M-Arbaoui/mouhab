@@ -38,6 +38,10 @@
 
 <div class="load-bar" id="load-bar" aria-hidden="true"></div>
 
+<button class="to-top" id="to-top" type="button" aria-label="Back to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="m18 15-6-6-6 6"/></svg>
+</button>
+
 <!-- INTRO -->
 <div class="intro" id="intro">
   <div class="intro-word">
@@ -59,10 +63,6 @@
     <button class="nav-link" data-page="mylist">My List</button>
   </div>
   <div class="nav-right">
-    <button class="nav-search-btn" id="nav-back-btn" aria-label="Back">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
-      <span class="nav-search-label">Back</span>
-    </button>
     <button class="nav-search-btn" id="search-icon-btn" aria-label="Search">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <span class="nav-search-label">Search</span>
@@ -234,17 +234,37 @@
 </div>
 
 <!-- MOVIES -->
-<div id="page-movies" class="page">
-  <div class="aux-header"><h1 class="aux-title">Movies</h1><p class="aux-sub">Popular and now playing worldwide</p></div>
+<div id="page-movies" class="page cat-page">
+  <section class="cat-spot" id="movies-spot" aria-label="Featured movies"></section>
+  <div class="cat-head">
+    <h1 class="aux-title">Movies</h1>
+    <p class="aux-sub">Films from around the world</p>
+  </div>
+  <div class="cat-bar">
+    <div class="cat-chips" id="movies-chips" role="group" aria-label="Genre"></div>
+    <div class="cat-sort" id="movies-sort" role="group" aria-label="Sort by"></div>
+  </div>
   <div id="movies-grid" class="grid-page"></div>
-  <div class="load-more-sentinel" id="movies-sentinel" style="display:none"><div class="load-more-spinner"></div></div>
+  <div class="cat-more-wrap">
+    <button class="cat-more" id="movies-more" type="button" hidden><span class="load-more-spinner" aria-hidden="true"></span><span class="cat-more-label">Load more</span></button>
+  </div>
 </div>
 
 <!-- SERIES -->
-<div id="page-series" class="page">
-  <div class="aux-header"><h1 class="aux-title">Series</h1><p class="aux-sub">Long-form storytelling at its finest</p></div>
+<div id="page-series" class="page cat-page">
+  <section class="cat-spot" id="series-spot" aria-label="Featured series"></section>
+  <div class="cat-head">
+    <h1 class="aux-title">Series</h1>
+    <p class="aux-sub">Shows from around the world</p>
+  </div>
+  <div class="cat-bar">
+    <div class="cat-chips" id="series-chips" role="group" aria-label="Genre"></div>
+    <div class="cat-sort" id="series-sort" role="group" aria-label="Sort by"></div>
+  </div>
   <div id="series-grid" class="grid-page"></div>
-  <div class="load-more-sentinel" id="series-sentinel" style="display:none"><div class="load-more-spinner"></div></div>
+  <div class="cat-more-wrap">
+    <button class="cat-more" id="series-more" type="button" hidden><span class="load-more-spinner" aria-hidden="true"></span><span class="cat-more-label">Load more</span></button>
+  </div>
 </div>
 
 <!-- MY LIST -->
@@ -254,10 +274,20 @@
 </div>
 
 <!-- ANIME PAGE -->
-<div id="page-anime" class="page">
-  <div class="aux-header"><h1 class="aux-title">Anime</h1><p class="aux-sub">Series and films from Japan, most popular first</p></div>
+<div id="page-anime" class="page cat-page">
+  <section class="cat-spot" id="anime-spot" aria-label="Featured anime"></section>
+  <div class="cat-head">
+    <h1 class="aux-title">Anime</h1>
+    <p class="aux-sub">Series and films from Japan</p>
+  </div>
+  <div class="cat-bar">
+    <div class="cat-chips" id="anime-chips" role="group" aria-label="Genre"></div>
+    <div class="cat-sort" id="anime-sort" role="group" aria-label="Sort by"></div>
+  </div>
   <div id="anime-grid" class="grid-page"></div>
-  <div class="load-more-sentinel" id="anime-sentinel" style="display:none"><div class="load-more-spinner"></div></div>
+  <div class="cat-more-wrap">
+    <button class="cat-more" id="anime-more" type="button" hidden><span class="load-more-spinner" aria-hidden="true"></span><span class="cat-more-label">Load more</span></button>
+  </div>
 </div>
 
 <!-- TITLE PAGE -->

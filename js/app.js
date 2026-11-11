@@ -55,16 +55,11 @@ const S={
   favs:lsGetJSON('wt_favs',[]),
   hist:lsGetJSON('wt_hist',[]),
   prog:lsGetJSON('wt_prog',{}),
-  moviesLoaded:false,seriesLoaded:false,
-  moviesPage:1,seriesPage:1,moviesLoading:false,seriesLoading:false,
-  moviesDone:false,seriesDone:false,
   playerItem:null,playerType:null,playerSeason:1,playerEp:1,
   playerEps:[],playerSeasons:0,playerSeasonData:{},
   searchOpen:false,searchFilter:'all',
   titleItem:null,titlePrevPage:'home',
-  animeLoaded:false,animePage:1,animeLoading:false,animeDone:false,
   playerOpenTime:0,playerRuntime:0,
-  pageHistory:['home'],navigatingBack:false,
 };
 const RESTORABLE_PAGES=['home','movies','series','anime','mylist'];
 (()=>{const p=lsGetRaw('wt_page');if(p&&RESTORABLE_PAGES.includes(p)){S.page=p;S.lastPage=p;}})();
@@ -177,6 +172,211 @@ function fmtRuntime(mins){
   if(!mins)return'';
   const h=Math.floor(mins/60),m=mins%60;
   return h>0?`${h}h ${m}m`:`${m}m`;
+}
+
+/* ══════════════════════════════════════════
+   CATALOG PAGES — Movies / Series / Anime
+   One engine for all three: a featured spotlight, genre chips, a sort
+   switch, the grid, and a "Load more" button (no endless scrolling).
+   ══════════════════════════════════════════ */
+const CATALOG={
+  movies:{type:'movie',genres:[['Action',28],['Adventure',12],['Animation',16],['Comedy',35],['Crime',80],['Documentary',99],['Drama',18],['Family',10751],['Fantasy',14],['Horror',27],['Mystery',9648],['Romance',10749],['Sci-Fi',878],['Thriller',53]]},
+  series:{type:'tv',genres:[['Action & Adventure',10759],['Animation',16],['Comedy',35],['Crime',80],['Documentary',99],['Drama',18],['Family',10751],['Kids',10762],['Mystery',9648],['Reality',10764],['Sci-Fi & Fantasy',10765],['War & Politics',10768],['Western',37]]},
+  // Anime is series and films together. TMDB numbers genres differently for
+  // each, so every chip carries one id per kind; a chip with only one id
+  // searches only that kind.
+  anime:{type:'both',genres:[['Action',{tv:10759,movie:28}],['Comedy',{tv:35,movie:35}],['Drama',{tv:18,movie:18}],['Fantasy',{tv:10765,movie:14}],['Sci-Fi',{tv:10765,movie:878}],['Mystery',{tv:9648,movie:9648}],['Romance',{movie:10749}],['Horror',{movie:27}]]},
+};
+const GENRE_NAME=(()=>{
+  const m=new Map(),add=(n,id)=>{if(id&&!m.has(id))m.set(id,n);};
+  CATALOG.movies.genres.forEach(([n,id])=>add(n,id));
+  CATALOG.series.genres.forEach(([n,id])=>add(n,id));
+  CATALOG.anime.genres.forEach(([n,ids])=>{add(n,ids.movie);add(n,ids.tv);});
+  return m;
+})();
+const CAT_SORTS=[['popular','Popular'],['top','Top rated'],['new','New']];
+const CAT_SKELETONS='<div class="card-sk" style="height:228px"></div>'.repeat(12);
+const catState={};
+
+// Quality floors keep obscure entries out; adult titles are removed centrally in api().
+function catParams(kind,sort,page){
+  const tv=kind==='tv';
+  const p={page};
+  if(sort==='top'){p.sort_by='vote_average.desc';p['vote_count.gte']=tv?500:1000;}
+  else if(sort==='new'){
+    p.sort_by=tv?'first_air_date.desc':'primary_release_date.desc';
+    p[tv?'first_air_date.lte':'primary_release_date.lte']=new Date().toISOString().slice(0,10);
+    p['vote_count.gte']=tv?15:25;
+  }else{p.sort_by='popularity.desc';p['vote_count.gte']=tv?80:100;}
+  return p;
+}
+const catDate=i=>i.release_date||i.first_air_date||'';
+async function catalogFetch(name,{genre,sort},page){
+  const cfg=CATALOG[name],gdef=cfg.genres.find(g=>g[0]===genre)?.[1];
+  if(cfg.type!=='both'){
+    const p=catParams(cfg.type,sort,page);
+    if(gdef)p.with_genres=String(gdef);
+    const d=await api(`/discover/${cfg.type}`,p);
+    return{ok:!!d,totalPages:d?.total_pages||1,items:(d?.results||[]).map(i=>({...i,media_type:cfg.type}))};
+  }
+  const reqs=[];
+  for(const kind of ['tv','movie']){
+    let gid=null;
+    if(genre){gid=gdef?.[kind];if(!gid)continue;}
+    const p=catParams(kind,sort,page);
+    p.with_genres=gid?`16,${gid}`:'16'; // comma = AND: animation AND this genre
+    p.with_original_language='ja';
+    reqs.push(api(`/discover/${kind}`,p).then(d=>({kind,d})));
+  }
+  const res=await Promise.all(reqs);
+  const items=[];let totalPages=0,ok=false;
+  res.forEach(({kind,d})=>{
+    if(d){ok=true;totalPages=Math.max(totalPages,d.total_pages||1);}
+    (d?.results||[]).forEach(i=>items.push({...i,media_type:kind}));
+  });
+  items.sort(sort==='top'?(a,b)=>(b.vote_average||0)-(a.vote_average||0)
+            :sort==='new'?(a,b)=>catDate(b).localeCompare(catDate(a))
+            :(a,b)=>(b.popularity||0)-(a.popularity||0));
+  return{ok,totalPages:totalPages||1,items};
+}
+
+function catMore(btn,state){
+  if(!btn)return;
+  const label=btn.querySelector('.cat-more-label');
+  btn.hidden=state==='hidden';
+  btn.disabled=state==='loading';
+  btn.classList.toggle('is-loading',state==='loading');
+  if(label)label.textContent=state==='loading'?'Loading…':state==='retry'?'Try again':'Load more';
+}
+async function catLoad(name,append=false){
+  const st=catState[name],grid=document.getElementById(`${name}-grid`),more=document.getElementById(`${name}-more`);
+  if(!st||!grid)return;
+  const token=++st.token; // a newer request makes this one's answer irrelevant
+  st.retry=false;
+  if(append)catMore(more,'loading');
+  else{st.page=1;st.seen=new Set();grid.innerHTML=CAT_SKELETONS;catMore(more,'hidden');}
+  loadBar.start();
+  let res;
+  try{res=await catalogFetch(name,{genre:st.genre,sort:st.sort},st.page);}
+  catch(_){res={ok:false,items:[],totalPages:1};}
+  finally{loadBar.done();}
+  if(token!==st.token)return;
+  if(!res.ok){
+    st.retry=true;
+    if(!append)grid.innerHTML=emptyHTML('Could not load.','Check your connection and try again.',EMPTY_ICON_SEARCH);
+    catMore(more,'retry');
+    if(!st.spotDone)document.getElementById(`${name}-spot`)?.setAttribute('class','cat-spot none');
+    return;
+  }
+  const fresh=res.items.filter(i=>{const k=`${mtyp(i)}:${i.id}`;if(st.seen.has(k))return false;st.seen.add(k);return true;}); // movie and TV ids can collide
+  if(!append)grid.innerHTML='';
+  if(!append&&!fresh.length){
+    grid.innerHTML=emptyHTML('Nothing matches.','Try another genre or sort.',EMPTY_ICON_SEARCH);
+    catMore(more,'hidden');
+    if(!st.spotDone)document.getElementById(`${name}-spot`)?.setAttribute('class','cat-spot none');
+    return;
+  }
+  fresh.forEach((item,i)=>{
+    const card=makeCard(item);
+    card.style.animationDelay=`${Math.min(i,8)*28}ms`;
+    card.classList.add('card-enter');
+    card.addEventListener('animationend',()=>card.classList.remove('card-enter'),{once:true});
+    grid.appendChild(card);
+  });
+  st.page++;
+  catMore(more,st.page<=Math.min(res.totalPages,500)?'idle':'hidden');
+  // The spotlight is made once, from the unfiltered first page.
+  if(!append&&!st.spotDone&&!st.genre&&st.sort==='popular'){st.spotDone=true;catSpotlight(name,res.items);}
+}
+
+function playItem(item){
+  if(mtyp(item)==='tv'){const last=getLastEp(item.id);openPlayer(item,'tv',last?.season||1,last?.episode||1);}
+  else openPlayer(item,'movie');
+}
+function catSpotlight(name,items){
+  const el=document.getElementById(`${name}-spot`),st=catState[name];if(!el||!st)return;
+  clearInterval(st.spotTimer);
+  const picks=items.filter(i=>i.backdrop_path).slice(0,6);
+  if(!picks.length){el.className='cat-spot none';el.innerHTML='';return;}
+  el.className='cat-spot ready';
+  el.innerHTML=`
+    <div class="cat-spot-bgs"><div class="cat-spot-bg"></div><div class="cat-spot-bg"></div></div>
+    <div class="cat-spot-body">
+      <div class="cat-spot-eyebrow"><span class="hero-pulse"></span><span class="cat-spot-eyebrow-text"></span></div>
+      <h2 class="cat-spot-title"></h2>
+      <div class="cat-spot-meta"></div>
+      <p class="cat-spot-ov"></p>
+      <div class="cat-spot-actions">
+        <button class="btn-primary cat-spot-play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Watch Now</button>
+        <button class="btn-ghost cat-spot-info" type="button">More Info</button>
+      </div>
+      <div class="cat-spot-dots"></div>
+    </div>`;
+  const q=sel=>el.querySelector(sel),bgs=[...el.querySelectorAll('.cat-spot-bg')],dotsEl=q('.cat-spot-dots');
+  let idx=-1,layer=0;
+  const dots=picks.map((_,i)=>{
+    const b=document.createElement('button');
+    b.className='hero-dot';b.type='button';b.setAttribute('aria-label',`Show featured title ${i+1}`);
+    b.innerHTML='<span class="hero-dot-fill"></span>';
+    b.addEventListener('click',()=>show(i));
+    dotsEl.appendChild(b);return b;
+  });
+  function show(i){
+    const item=picks[i];idx=i;
+    // Everything below goes in as text: titles and summaries come from an external API.
+    q('.cat-spot-eyebrow-text').textContent=`Featured ${mtyp(item)==='tv'?'series':'film'}`;
+    q('.cat-spot-title').textContent=ttl(item);
+    const meta=q('.cat-spot-meta');meta.innerHTML=fmtScore(item.vote_average)||'';
+    const bits=[yr(item),(item.genre_ids||[]).map(id=>GENRE_NAME.get(id)).filter(n=>n&&n!=='Animation').slice(0,3).join(', ')].filter(Boolean);
+    bits.forEach(t=>{const sep=document.createElement('span');sep.className='hero-sep';const sp=document.createElement('span');sp.textContent=t;meta.append(sep,sp);});
+    q('.cat-spot-ov').textContent=item.overview||'';
+    q('.cat-spot-play').onclick=()=>playItem(item);
+    q('.cat-spot-info').onclick=()=>openTitlePage(item);
+    dots.forEach((d,k)=>d.classList.toggle('active',k===i));
+    // Preload, then crossfade, so the picture never flashes empty.
+    const img=new Image();
+    img.onload=()=>{
+      if(idx!==i)return;
+      layer^=1;
+      bgs[layer].style.backgroundImage=`url("${TMDB_IMG}/w1280${item.backdrop_path}")`;
+      bgs.forEach((b,k)=>b.classList.toggle('visible',k===layer));
+    };
+    img.src=`${TMDB_IMG}/w1280${item.backdrop_path}`;
+    clearInterval(st.spotTimer);
+    st.spotTimer=setInterval(()=>{if(S.page===name&&!document.hidden)show((idx+1)%picks.length);},12000);
+  }
+  show(0);
+}
+
+function catOpen(name){
+  if(catState[name])return; // already built: the page keeps its place and filters
+  const st=catState[name]={genre:null,sort:'popular',page:1,seen:new Set(),token:0,retry:false,spotDone:false,spotTimer:0};
+  const cfg=CATALOG[name];
+  const chips=document.getElementById(`${name}-chips`),sort=document.getElementById(`${name}-sort`),more=document.getElementById(`${name}-more`);
+  const press=(wrap,pred)=>wrap.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(pred(b))));
+  const change=()=>{
+    catLoad(name);
+    // bring the first row back into view if the viewer was far down the page
+    const grid=document.getElementById(`${name}-grid`);
+    const top=grid.getBoundingClientRect().top+window.scrollY-130;
+    if(window.scrollY>top)window.scrollTo({top:Math.max(0,top),behavior:'smooth'});
+  };
+  [['All',null],...cfg.genres.map(g=>[g[0],g[0]])].forEach(([label,val])=>{
+    const b=document.createElement('button');
+    b.className='cat-chip';b.type='button';b.textContent=label;b.dataset.genre=val??'';
+    b.setAttribute('aria-pressed',String(val===null));
+    b.addEventListener('click',()=>{if(st.genre===val)return;st.genre=val;press(chips,x=>x===b);change();});
+    chips.appendChild(b);
+  });
+  CAT_SORTS.forEach(([val,label])=>{
+    const b=document.createElement('button');
+    b.className='cat-sort-btn';b.type='button';b.textContent=label;b.dataset.sort=val;
+    b.setAttribute('aria-pressed',String(val===st.sort));
+    b.addEventListener('click',()=>{if(st.sort===val)return;st.sort=val;press(sort,x=>x===b);change();});
+    sort.appendChild(b);
+  });
+  more.addEventListener('click',()=>catLoad(name,st.retry?st.page>1:true));
+  catLoad(name);
 }
 
 /* ── Hash routing ── */
@@ -570,16 +770,6 @@ function goTo(name,skipSave=false,restoreScroll=false){
     }
     S.page=name;
     if(!skipSave)savePage(name);
-    const MAIN_PAGES=['home','movies','series','anime','mylist'];
-    if(MAIN_PAGES.includes(name)){
-      if(S.navigatingBack){
-        S.navigatingBack=false;
-      }else if(S.pageHistory[S.pageHistory.length-1]!==name){
-        S.pageHistory.push(name);
-        if(S.pageHistory.length>20)S.pageHistory.shift();
-      }
-    }
-    document.getElementById('nav-back-btn')?.classList.toggle('show',S.pageHistory.length>1&&MAIN_PAGES.includes(name));
     // The URL hash is only ever set by openTitlePage/openPlayer (for deep-
     // linking). Leaving it in place after navigating elsewhere means a
     // refresh on, say, Home would silently reopen whatever title or player
@@ -609,18 +799,6 @@ function goTo(name,skipSave=false,restoreScroll=false){
     applySwitch();
   }
 }
-function navBack(){
-  if(S.pageHistory.length<=1)return;
-  S.pageHistory.pop(); // drop the current page
-  const prev=S.pageHistory[S.pageHistory.length-1];
-  S.navigatingBack=true; // don't re-push prev as a "new" visit
-  if(prev==='movies')navTo('movies',true);
-  else if(prev==='series')navTo('series',true);
-  else if(prev==='mylist')navTo('mylist',true);
-  else if(prev==='anime')navTo('anime',true);
-  else goTo(prev,false,true);
-}
-
 /* ── Nav underline (single shared indicator that slides between links) ── */
 function moveNavUnderline(){
   const wrap=document.querySelector('.nav-links');
@@ -978,29 +1156,6 @@ async function fillRail(el,fn,opts={}){
     card.addEventListener('animationend',()=>card.classList.remove('card-enter'),{once:true});
     el.appendChild(card);
   });
-}
-const pagedfetch={
-  movies:page=>api('/movie/popular',{page}).then(d=>d?.results||[]),
-  nowPlaying:page=>api('/movie/now_playing',{page}).then(d=>d?.results||[]),
-  tv:page=>api('/tv/popular',{page}).then(d=>d?.results||[]),
-  topTV:page=>api('/tv/top_rated',{page}).then(d=>d?.results||[]),
-  // Anime = Animation genre + Japanese original language, series and films
-  // together, most popular first. Quality floors keep obscure entries out;
-  // adult titles are removed centrally in api().
-  anime:async page=>{
-    const base={with_genres:'16',with_original_language:'ja',sort_by:'popularity.desc',page};
-    const [tv,mv]=await Promise.all([
-      api('/discover/tv',{...base,'vote_count.gte':80}),
-      api('/discover/movie',{...base,'vote_count.gte':150}),
-    ]);
-    const tag=(d,t)=>(d?.results||[]).map(i=>({...i,media_type:t}));
-    return [...tag(tv,'tv'),...tag(mv,'movie')].sort((a,b)=>(b.popularity||0)-(a.popularity||0));
-  },
-};
-function initInfiniteScroll(sentinelId,onLoad){
-  const sentinel=document.getElementById(sentinelId);if(!sentinel)return;
-  const obs=new IntersectionObserver(entries=>{if(entries[0].isIntersecting)onLoad();},{rootMargin:'200px'});
-  obs.observe(sentinel);return obs;
 }
 const emptyHTML=(h,p,icon)=>`<div class="empty"><div class="empty-icon">${icon||'<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 8 8 5 8-5"/></svg>'}</div><div class="empty-h">${h}</div><div class="empty-p">${p}</div></div>`;
 const EMPTY_ICON_SEARCH='<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>';
@@ -2050,6 +2205,12 @@ function initKeyboard(){
   window.addEventListener('scroll',update,{passive:true});
   update(); // a page restored part-way down starts in the right state
 })();
+(()=>{
+  const btn=document.getElementById('to-top');if(!btn)return;
+  const update=()=>btn.classList.toggle('show',window.scrollY>900&&['movies','series','anime'].includes(S.page));
+  window.addEventListener('scroll',update,{passive:true});
+  btn.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+})();
 
 /* ── PWA ── */
 let _installPrompt=null;
@@ -2181,81 +2342,10 @@ function copyTitleLink(){
 document.addEventListener('DOMContentLoaded',()=>{
   const startPage=RESTORABLE_PAGES.includes(S.lastPage)?S.lastPage:'home';
 
-  async function navTo(p,restoreScroll=false){
-    goTo(p,false,restoreScroll);
-    if(p==='movies'&&!S.moviesLoaded){
-      S.moviesLoaded=true;S.moviesPage=1;S.moviesDone=false;
-      const grid=document.getElementById('movies-grid');
-      grid.innerHTML='<div class="card-sk" style="height:228px"></div>'.repeat(12);
-      loadBar.start();
-      const [a,b]=await Promise.all([pagedfetch.movies(1),pagedfetch.nowPlaying(1)]);
-      loadBar.done();
-      grid.innerHTML='';
-      [...a,...b].filter((v,i,arr)=>arr.findIndex(x=>x.id===v.id)===i).forEach(item=>grid.appendChild(makeCard(item)));
-      S.moviesPage=2;
-      const sentinel=document.getElementById('movies-sentinel');
-      if(sentinel)sentinel.style.display='block';
-      initInfiniteScroll('movies-sentinel',async()=>{
-        if(S.moviesLoading||S.moviesDone)return;
-        S.moviesLoading=true;
-        const more=await pagedfetch.movies(S.moviesPage);
-        if(!more.length){S.moviesDone=true;document.getElementById('movies-sentinel').style.display='none';}
-        else{more.forEach(item=>grid.appendChild(makeCard(item)));S.moviesPage++;}
-        S.moviesLoading=false;
-      });
-    }
-    if(p==='series'&&!S.seriesLoaded){
-      S.seriesLoaded=true;S.seriesPage=1;S.seriesDone=false;
-      const grid=document.getElementById('series-grid');
-      grid.innerHTML='<div class="card-sk" style="height:228px"></div>'.repeat(12);
-      loadBar.start();
-      const [a,b]=await Promise.all([pagedfetch.tv(1),pagedfetch.topTV(1)]);
-      loadBar.done();
-      grid.innerHTML='';
-      [...a,...b].filter((v,i,arr)=>arr.findIndex(x=>x.id===v.id)===i).forEach(item=>grid.appendChild(makeCard(item)));
-      S.seriesPage=2;
-      const sentinel=document.getElementById('series-sentinel');
-      if(sentinel)sentinel.style.display='block';
-      initInfiniteScroll('series-sentinel',async()=>{
-        if(S.seriesLoading||S.seriesDone)return;
-        S.seriesLoading=true;
-        const more=await pagedfetch.tv(S.seriesPage);
-        if(!more.length){S.seriesDone=true;document.getElementById('series-sentinel').style.display='none';}
-        else{more.forEach(item=>grid.appendChild(makeCard(item)));S.seriesPage++;}
-        S.seriesLoading=false;
-      });
-    }
+  async function navTo(p){
+    goTo(p);
+    if(CATALOG[p])catOpen(p);
     if(p==='mylist')refreshFavPage();
-    if(p==='anime'&&!S.animeLoaded){
-      S.animeLoaded=true;S.animePage=1;S.animeDone=false;
-      const grid=document.getElementById('anime-grid');
-      grid.innerHTML='<div class="card-sk" style="height:228px"></div>'.repeat(12);
-      loadBar.start();
-      const first=await pagedfetch.anime(1);
-      loadBar.done();
-      grid.innerHTML='';
-      if(!first.length){
-        // Offline or TMDB hiccup: say so, and let the next visit retry.
-        grid.innerHTML=emptyHTML('Anime could not be loaded.','Check your connection and open this page again.',EMPTY_ICON_SEARCH);
-        S.animeLoaded=false;return;
-      }
-      const seen=new Set();
-      const add=list=>list.forEach(item=>{
-        const key=`${mtyp(item)}:${item.id}`; // movie and TV ids can collide
-        if(seen.has(key))return;seen.add(key);grid.appendChild(makeCard(item));
-      });
-      add(first);S.animePage=2;
-      const sentinel=document.getElementById('anime-sentinel');
-      if(sentinel)sentinel.style.display='block';
-      initInfiniteScroll('anime-sentinel',async()=>{
-        if(S.animeLoading||S.animeDone)return;
-        S.animeLoading=true;
-        const more=await pagedfetch.anime(S.animePage);
-        if(!more.length){S.animeDone=true;document.getElementById('anime-sentinel').style.display='none';}
-        else{add(more);S.animePage++;}
-        S.animeLoading=false;
-      });
-    }
   }
 
   // Nav
@@ -2289,7 +2379,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('person-back-btn')?.addEventListener('click',()=>{if(S.titleItem)openTitlePage(S.titleItem);else goTo(S.lastPage||'home',false,true);});
   // Search
   document.getElementById('search-icon-btn').addEventListener('click',openSearch);
-  document.getElementById('nav-back-btn')?.addEventListener('click',navBack);
   document.getElementById('search-overlay-close')?.addEventListener('click',closeSearch);
   document.getElementById('search-overlay-backdrop')?.addEventListener('click',closeSearch);
   document.getElementById('search-overlay-input')?.addEventListener('input',e=>{handleSearchInput(e.target.value);clearSearchOnEmpty(e.target.value);});

@@ -334,11 +334,6 @@ select{appearance:none;-webkit-appearance:none}
 .nav.scrolled .nav-search-btn{background:rgba(255,255,255,.045);border-color:rgba(247,240,227,.08)}
 .nav.scrolled .nav-search-btn:hover{background:rgba(255,255,255,.08);border-color:rgba(201,169,110,.45)}
 .nav-search-label{font-size:12px}
-#nav-back-btn{
-  display:none;opacity:0;transform:translateX(4px);
-  transition:color .18s,border-color .18s,background .18s,opacity .2s var(--ease),transform .2s var(--ease);
-}
-#nav-back-btn.show{display:flex;opacity:1;transform:translateX(0)}
 
 /* ════════════════════════════════
    SEARCH OVERLAY
@@ -877,11 +872,6 @@ select{appearance:none;-webkit-appearance:none}
   display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
   gap:16px;padding:0 60px 120px;
 }
-.load-more-sentinel{
-  display:none;width:100%;padding:40px 0;grid-column:1/-1;
-  align-items:center;justify-content:center;
-}
-.load-more-sentinel.loading{display:flex}
 .load-more-spinner{
   width:32px;height:32px;border-radius:50%;
   border:2px solid rgba(201,169,110,.14);border-top-color:var(--gold);
@@ -1243,6 +1233,103 @@ select{appearance:none;-webkit-appearance:none}
 .ep-loading{padding:20px;text-align:center;color:var(--text3);font-size:13px}
 
 /* ════════════════════════════════
+   CATALOG PAGES (Movies / Series / Anime)
+════════════════════════════════ */
+.cat-page{padding-bottom:50px}
+
+/* Featured spotlight: slow-moving artwork, one title at a time. Reads like
+   the Home hero but quieter, and it turns over every 12 seconds. */
+.cat-spot{
+  position:relative;overflow:hidden;display:flex;align-items:flex-end;
+  min-height:min(46vh,440px);
+  background-color:var(--card);
+  background-image:linear-gradient(90deg,var(--card) 0%,rgba(255,255,255,.04) 50%,var(--card) 100%);
+  background-size:200% 100%;animation:shimmer 1.8s ease infinite;
+}
+.cat-spot.ready{animation:none;background:var(--bg)}
+.cat-spot.none{min-height:calc(var(--nav-h) + 8px);animation:none;background:var(--bg)}
+.cat-spot-bgs{position:absolute;inset:0 0 -1px 0} /* -1px: no hairline seam at the bottom edge */
+.cat-spot-bg{
+  position:absolute;inset:0;background-size:cover;background-position:center 25%;
+  opacity:0;transition:opacity .8s ease;
+}
+.cat-spot-bg.visible{opacity:1;animation:heroSlowZoom 16s ease-out forwards}
+.cat-spot-bgs::after{
+  content:'';position:absolute;inset:0;
+  background:
+    linear-gradient(to bottom,rgba(9,9,11,.5) 0%,rgba(9,9,11,.05) 28%,rgba(9,9,11,.5) 66%,var(--bg) 97%),
+    linear-gradient(to right,rgba(9,9,11,.8) 0%,rgba(9,9,11,.3) 52%,transparent 82%);
+}
+.cat-spot-body{position:relative;z-index:2;width:100%;max-width:760px;padding:96px 60px 26px}
+.cat-spot-eyebrow{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-muted);
+}
+.cat-spot-title{
+  font-family:var(--font-d);font-size:clamp(30px,4vw,52px);font-weight:300;
+  line-height:1.05;letter-spacing:-.02em;color:var(--text);margin-bottom:10px;
+  text-shadow:0 2px 28px rgba(0,0,0,.45);
+}
+.cat-spot-meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-bottom:12px}
+.cat-spot-ov{
+  font-size:14.5px;line-height:1.65;color:var(--text2);max-width:560px;margin-bottom:18px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.cat-spot-actions{display:flex;gap:10px;flex-wrap:wrap}
+.cat-spot-dots{display:flex;gap:6px;margin-top:18px}
+.cat-spot-dots .hero-dot{background:rgba(255,255,255,.22)}
+
+.cat-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 16px;padding:24px 60px 0}
+.cat-head .aux-title{font-size:32px;margin:0}
+.cat-head .aux-sub{margin:0}
+
+/* Genre chips + sort. Stays under the nav while the grid scrolls past, so a
+   filter is always one tap away. Opaque on purpose (no blur layer). */
+.cat-bar{
+  position:sticky;top:var(--nav-h);z-index:20;
+  display:flex;align-items:center;gap:18px;
+  margin-top:14px;padding:12px 60px;
+  background:rgba(9,9,11,.97);
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+}
+.cat-chips{display:flex;gap:8px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;padding:2px 0}
+.cat-chips::-webkit-scrollbar{display:none}
+.cat-chip{
+  flex-shrink:0;padding:6px 14px;border-radius:999px;
+  font-size:12.5px;color:var(--text2);
+  border:1px solid var(--border);background:transparent;
+  transition:color .2s ease,border-color .2s ease,background .2s ease;
+}
+.cat-chip:hover{color:var(--text);border-color:var(--border2)}
+.cat-chip[aria-pressed="true"]{color:var(--gold);border-color:rgba(201,169,110,.5);background:var(--gold-dim)}
+.cat-sort{
+  display:flex;flex-shrink:0;padding:3px;border-radius:999px;
+  border:1px solid var(--border2);background:rgba(255,255,255,.03);
+}
+.cat-sort-btn{
+  padding:5px 13px;border-radius:999px;font-size:12px;color:var(--text2);
+  transition:color .2s ease,background .2s ease;
+}
+.cat-sort-btn:hover{color:var(--text)}
+.cat-sort-btn[aria-pressed="true"]{background:var(--gold-dim);color:var(--gold)}
+.cat-chip:focus-visible,.cat-sort-btn:focus-visible,.cat-more:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+.cat-page .grid-page{padding-top:26px;padding-bottom:30px}
+.cat-more-wrap{display:flex;justify-content:center;padding:8px 60px 0}
+.cat-more{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  min-width:170px;padding:13px 32px;border-radius:999px;
+  border:1px solid rgba(201,169,110,.4);background:var(--gold-dim);
+  font-size:13px;font-weight:500;letter-spacing:.04em;color:var(--gold);
+  transition:background .2s ease,border-color .2s ease,opacity .2s ease;
+}
+.cat-more:hover{background:rgba(201,169,110,.2);border-color:var(--gold)}
+.cat-more:disabled{opacity:.75;pointer-events:none}
+.cat-more[hidden]{display:none}
+.cat-more .load-more-spinner{display:none;width:14px;height:14px;border-width:2px}
+.cat-more.is-loading .load-more-spinner{display:block}
+
+/* ════════════════════════════════
    PERSON PAGE
 ════════════════════════════════ */
 #page-person{overflow-y:auto}
@@ -1589,6 +1676,14 @@ select{appearance:none;-webkit-appearance:none}
 ════════════════════════════════ */
 @media(max-width:800px){
   :root{--nav-h:52px}
+  /* Catalog pages */
+  .cat-spot{min-height:320px}
+  .cat-spot-body{padding:calc(var(--nav-h) + 56px) 16px 26px}
+  .cat-spot-ov{font-size:13.5px;margin-bottom:18px}
+  .cat-head{padding:20px 16px 0}
+  .cat-bar{position:static;flex-direction:column;align-items:stretch;gap:10px;padding:10px 16px;margin-top:14px}
+  .cat-sort{align-self:flex-start}
+  .cat-more-wrap{padding:6px 16px 0}
   /* Watch page */
   .player-topbar{grid-template-columns:auto minmax(0,1fr) auto;padding:0 10px;gap:8px;height:50px}
   .pb{padding:0;width:34px;justify-content:center}
@@ -1665,3 +1760,19 @@ select{appearance:none;-webkit-appearance:none}
 @media(hover:none){
   .card-fav{opacity:.75}
 }
+
+/* Back to top — only on the long catalog lists, only once you are well down. */
+.to-top{
+  position:fixed;right:28px;bottom:28px;z-index:300;
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(9,9,11,.92);color:var(--gold);
+  border:1px solid rgba(201,169,110,.4);
+  box-shadow:0 8px 28px rgba(12,9,5,.6);
+  opacity:0;transform:translateY(8px);pointer-events:none;
+  transition:opacity .25s ease,transform .25s var(--ease),border-color .2s ease;
+}
+.to-top.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.to-top:hover{border-color:var(--gold)}
+.to-top:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:800px){.to-top{right:16px;bottom:88px}}
