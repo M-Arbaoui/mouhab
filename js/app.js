@@ -161,6 +161,15 @@ const imgP=p=>p?`${TMDB_IMG}/w342${p}`:null;
 const imgB=p=>p?`${TMDB_IMG}/w1280${p}`:null;
 const imgBHi=p=>p?`${TMDB_IMG}/original${p}`:null;
 const imgBLq=p=>p?`${TMDB_IMG}/w300${p}`:null;
+// Which backdrop to show. w1280 is sharp up to about 1280 physical pixels across;
+// a bigger or denser screen gets the original. The 1280 copy is always shown
+// first and swapped for the original once it has arrived, so choosing the larger
+// file never delays the first paint.
+function backdropSizes(path){
+  if(!path)return{lo:null,hi:null};
+  const need=Math.ceil(window.innerWidth*(window.devicePixelRatio||1));
+  return{lo:`${TMDB_IMG}/w1280${path}`,hi:need>1280?`${TMDB_IMG}/original${path}`:null};
+}
 const imgFace=p=>p?`${TMDB_IMG}/w185${p}`:null;
 function fmtScore(v){
   if(!v)return'';
@@ -179,9 +188,13 @@ function fmtRuntime(mins){
    One engine for all three: a featured spotlight, genre chips, a sort
    switch, the grid, and a "Load more" button (no endless scrolling).
    ══════════════════════════════════════════ */
+// Origin countries offered on Movies and Series (TMDB's own two-letter codes).
+// The filter is applied by TMDB itself (with_origin_country), not by trimming
+// what was already loaded, so a chosen country still fills a whole batch.
+const COUNTRIES=[['DZ','Algeria'],['AR','Argentina'],['AU','Australia'],['BE','Belgium'],['BR','Brazil'],['CA','Canada'],['CN','China'],['DK','Denmark'],['EG','Egypt'],['FR','France'],['DE','Germany'],['HK','Hong Kong'],['IN','India'],['IR','Iran'],['IT','Italy'],['JP','Japan'],['LB','Lebanon'],['MX','Mexico'],['MA','Morocco'],['NL','Netherlands'],['NG','Nigeria'],['NO','Norway'],['PL','Poland'],['RU','Russia'],['SA','Saudi Arabia'],['ZA','South Africa'],['KR','South Korea'],['ES','Spain'],['SE','Sweden'],['TH','Thailand'],['TN','Tunisia'],['TR','Turkey'],['AE','United Arab Emirates'],['GB','United Kingdom'],['US','United States']];
 const CATALOG={
-  movies:{type:'movie',genres:[['Action',28],['Adventure',12],['Animation',16],['Comedy',35],['Crime',80],['Documentary',99],['Drama',18],['Family',10751],['Fantasy',14],['Horror',27],['Mystery',9648],['Romance',10749],['Sci-Fi',878],['Thriller',53]]},
-  series:{type:'tv',genres:[['Action & Adventure',10759],['Animation',16],['Comedy',35],['Crime',80],['Documentary',99],['Drama',18],['Family',10751],['Kids',10762],['Mystery',9648],['Reality',10764],['Sci-Fi & Fantasy',10765],['War & Politics',10768],['Western',37]]},
+  movies:{type:'movie',countries:COUNTRIES,genres:[['Action',28],['Adventure',12],['Animation',16],['Comedy',35],['Crime',80],['Documentary',99],['Drama',18],['Family',10751],['Fantasy',14],['Horror',27],['Mystery',9648],['Romance',10749],['Sci-Fi',878],['Thriller',53]]},
+  series:{type:'tv',countries:COUNTRIES,genres:[['Action & Adventure',10759],['Animation',16],['Comedy',35],['Crime',80],['Documentary',99],['Drama',18],['Family',10751],['Kids',10762],['Mystery',9648],['Reality',10764],['Sci-Fi & Fantasy',10765],['War & Politics',10768],['Western',37]]},
   // Anime is series and films together. TMDB numbers genres differently for
   // each, so every chip carries one id per kind; a chip with only one id
   // searches only that kind.
@@ -199,22 +212,26 @@ const CAT_SKELETONS='<div class="card-sk" style="height:228px"></div>'.repeat(12
 const catState={};
 
 // Quality floors keep obscure entries out; adult titles are removed centrally in api().
-function catParams(kind,sort,page){
-  const tv=kind==='tv';
+// Quality floors keep obscure entries out; adult titles are removed centrally in api().
+// Inside one country there are far fewer votes to go round, so the floors drop
+// to about an eighth: otherwise "Top rated" in a small film industry would be empty.
+function catParams(kind,sort,page,country){
+  const tv=kind==='tv',k=country?.12:1,fl=n=>Math.max(1,Math.round(n*k));
   const p={page};
-  if(sort==='top'){p.sort_by='vote_average.desc';p['vote_count.gte']=tv?500:1000;}
+  if(sort==='top'){p.sort_by='vote_average.desc';p['vote_count.gte']=fl(tv?500:1000);}
   else if(sort==='new'){
     p.sort_by=tv?'first_air_date.desc':'primary_release_date.desc';
     p[tv?'first_air_date.lte':'primary_release_date.lte']=new Date().toISOString().slice(0,10);
-    p['vote_count.gte']=tv?15:25;
-  }else{p.sort_by='popularity.desc';p['vote_count.gte']=tv?80:100;}
+    p['vote_count.gte']=fl(tv?15:25);
+  }else{p.sort_by='popularity.desc';p['vote_count.gte']=fl(tv?80:100);}
+  if(country)p.with_origin_country=country;
   return p;
 }
 const catDate=i=>i.release_date||i.first_air_date||'';
-async function catalogFetch(name,{genre,sort},page){
+async function catalogFetch(name,{genre,sort,country},page){
   const cfg=CATALOG[name],gdef=cfg.genres.find(g=>g[0]===genre)?.[1];
   if(cfg.type!=='both'){
-    const p=catParams(cfg.type,sort,page);
+    const p=catParams(cfg.type,sort,page,country);
     if(gdef)p.with_genres=String(gdef);
     const d=await api(`/discover/${cfg.type}`,p);
     return{ok:!!d,totalPages:d?.total_pages||1,items:(d?.results||[]).map(i=>({...i,media_type:cfg.type}))};
@@ -248,45 +265,73 @@ function catMore(btn,state){
   btn.classList.toggle('is-loading',state==='loading');
   if(label)label.textContent=state==='loading'?'Loading…':state==='retry'?'Try again':'Load more';
 }
+// Every press of "Load more" shows 100 more titles, then waits for the next
+// press. TMDB hands out 20 per page, so a batch is five pages asked for at the
+// same time; whatever a batch brings beyond 100 (Anime merges two lists, and a
+// page can repeat titles) waits in a buffer for the next press instead of
+// being thrown away.
+const CAT_BATCH=100,CAT_PAGES_PER_ROUND=5;
+const catSorter=sort=>sort==='top'?(a,b)=>(b.vote_average||0)-(a.vote_average||0)
+  :sort==='new'?(a,b)=>catDate(b).localeCompare(catDate(a))
+  :(a,b)=>(b.popularity||0)-(a.popularity||0);
+function catReset(st){st.buffer=[];st.nextPage=1;st.maxPage=500;st.exhausted=false;st.seen=new Set();st.shown=0;}
 async function catLoad(name,append=false){
   const st=catState[name],grid=document.getElementById(`${name}-grid`),more=document.getElementById(`${name}-more`);
   if(!st||!grid)return;
   const token=++st.token; // a newer request makes this one's answer irrelevant
   st.retry=false;
   if(append)catMore(more,'loading');
-  else{st.page=1;st.seen=new Set();grid.innerHTML=CAT_SKELETONS;catMore(more,'hidden');}
+  else{catReset(st);grid.innerHTML=CAT_SKELETONS;catMore(more,'hidden');}
   loadBar.start();
-  let res;
-  try{res=await catalogFetch(name,{genre:st.genre,sort:st.sort},st.page);}
-  catch(_){res={ok:false,items:[],totalPages:1};}
-  finally{loadBar.done();}
+  let failed=false;
+  try{
+    // top the buffer up until it holds a full batch, or the list runs out
+    while(st.buffer.length<CAT_BATCH&&!st.exhausted){
+      const pages=[];
+      while(pages.length<CAT_PAGES_PER_ROUND&&st.nextPage<=st.maxPage)pages.push(st.nextPage++);
+      if(!pages.length){st.exhausted=true;break;}
+      const rs=await Promise.all(pages.map(p=>
+        catalogFetch(name,{genre:st.genre,sort:st.sort,country:st.country},p).catch(()=>({ok:false,items:[],totalPages:1}))));
+      if(token!==st.token)return;
+      const good=rs.filter(r=>r.ok);
+      if(!good.length){failed=true;break;}
+      st.maxPage=Math.min(500,Math.max(...good.map(r=>r.totalPages)));
+      let chunk=good.flatMap(r=>r.items).filter(i=>{
+        const k=`${mtyp(i)}:${i.id}`; // movie and TV ids can collide
+        if(st.seen.has(k))return false;st.seen.add(k);return true;
+      });
+      if(CATALOG[name].type==='both')chunk.sort(catSorter(st.sort));
+      st.buffer.push(...chunk);
+      if(st.nextPage>st.maxPage||good.every(r=>!r.items.length))st.exhausted=true; // a page past the end comes back empty
+    }
+  }finally{loadBar.done();}
   if(token!==st.token)return;
-  if(!res.ok){
+  if(failed&&!st.buffer.length){
     st.retry=true;
     if(!append)grid.innerHTML=emptyHTML('Could not load.','Check your connection and try again.',EMPTY_ICON_SEARCH);
     catMore(more,'retry');
     if(!st.spotDone)document.getElementById(`${name}-spot`)?.setAttribute('class','cat-spot none');
     return;
   }
-  const fresh=res.items.filter(i=>{const k=`${mtyp(i)}:${i.id}`;if(st.seen.has(k))return false;st.seen.add(k);return true;}); // movie and TV ids can collide
+  const batch=st.buffer.splice(0,CAT_BATCH);
   if(!append)grid.innerHTML='';
-  if(!append&&!fresh.length){
-    grid.innerHTML=emptyHTML('Nothing matches.','Try another genre or sort.',EMPTY_ICON_SEARCH);
+  if(!append&&!batch.length){
+    grid.innerHTML=emptyHTML('Nothing matches.',CATALOG[name].countries?'Try changing the genre, country or sort.':'Try another genre or sort.',EMPTY_ICON_SEARCH);
     catMore(more,'hidden');
     if(!st.spotDone)document.getElementById(`${name}-spot`)?.setAttribute('class','cat-spot none');
     return;
   }
-  fresh.forEach((item,i)=>{
+  batch.forEach((item,i)=>{
     const card=makeCard(item);
     card.style.animationDelay=`${Math.min(i,8)*28}ms`;
     card.classList.add('card-enter');
     card.addEventListener('animationend',()=>card.classList.remove('card-enter'),{once:true});
     grid.appendChild(card);
   });
-  st.page++;
-  catMore(more,st.page<=Math.min(res.totalPages,500)?'idle':'hidden');
-  // The spotlight is made once, from the unfiltered first page.
-  if(!append&&!st.spotDone&&!st.genre&&st.sort==='popular'){st.spotDone=true;catSpotlight(name,res.items);}
+  st.shown+=batch.length;
+  catMore(more,st.buffer.length||!st.exhausted?'idle':'hidden');
+  // The spotlight is made once, from the unfiltered first batch.
+  if(!append&&!st.spotDone&&!st.genre&&!st.country&&st.sort==='popular'){st.spotDone=true;catSpotlight(name,batch);}
 }
 
 function playItem(item){
@@ -298,20 +343,24 @@ function catSpotlight(name,items){
   clearInterval(st.spotTimer);
   const picks=items.filter(i=>i.backdrop_path).slice(0,6);
   if(!picks.length){el.className='cat-spot none';el.innerHTML='';return;}
-  el.className='cat-spot ready';
+  el.className='frame cat-spot ready';
   el.innerHTML=`
     <div class="cat-spot-bgs"><div class="cat-spot-bg"></div><div class="cat-spot-bg"></div></div>
     <div class="cat-spot-body">
-      <div class="cat-spot-eyebrow"><span class="hero-pulse"></span><span class="cat-spot-eyebrow-text"></span></div>
-      <h2 class="cat-spot-title"></h2>
-      <div class="cat-spot-meta"></div>
-      <p class="cat-spot-ov"></p>
-      <div class="cat-spot-actions">
-        <button class="btn-primary cat-spot-play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Watch Now</button>
-        <button class="btn-ghost cat-spot-info" type="button">More Info</button>
+      <div class="cat-spot-poster" hidden><img alt="" decoding="async"></div>
+      <div class="cat-spot-text">
+        <div class="cat-spot-eyebrow"><span class="hero-pulse"></span><span class="cat-spot-eyebrow-text"></span></div>
+        <h2 class="cat-spot-title"></h2>
+        <div class="cat-spot-meta"></div>
+        <p class="cat-spot-ov"></p>
+        <div class="cat-spot-actions">
+          <button class="btn-primary cat-spot-play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Watch Now</button>
+          <button class="btn-ghost cat-spot-info" type="button">More Info</button>
+        </div>
+        <div class="cat-spot-dots"></div>
       </div>
-      <div class="cat-spot-dots"></div>
-    </div>`;
+    </div>
+`;
   const q=sel=>el.querySelector(sel),bgs=[...el.querySelectorAll('.cat-spot-bg')],dotsEl=q('.cat-spot-dots');
   let idx=-1,layer=0;
   const dots=picks.map((_,i)=>{
@@ -330,18 +379,30 @@ function catSpotlight(name,items){
     const bits=[yr(item),(item.genre_ids||[]).map(id=>GENRE_NAME.get(id)).filter(n=>n&&n!=='Animation').slice(0,3).join(', ')].filter(Boolean);
     bits.forEach(t=>{const sep=document.createElement('span');sep.className='hero-sep';const sp=document.createElement('span');sp.textContent=t;meta.append(sep,sp);});
     q('.cat-spot-ov').textContent=item.overview||'';
+    // The film's poster, whole, beside the text (w500: sharp at 190px even on dense screens).
+    const pBox=q('.cat-spot-poster'),pImg=pBox.querySelector('img');
+    pImg.classList.remove('loaded');
+    if(item.poster_path){
+      pBox.hidden=false;pImg.alt=`${ttl(item)} poster`;
+      pImg.onload=()=>{if(idx===i)pImg.classList.add('loaded');};
+      pImg.src=`${TMDB_IMG}/w500${item.poster_path}`;
+    }else pBox.hidden=true;
     q('.cat-spot-play').onclick=()=>playItem(item);
     q('.cat-spot-info').onclick=()=>openTitlePage(item);
     dots.forEach((d,k)=>d.classList.toggle('active',k===i));
     // Preload, then crossfade, so the picture never flashes empty.
+    const{lo,hi}=backdropSizes(item.backdrop_path);
     const img=new Image();
     img.onload=()=>{
       if(idx!==i)return;
       layer^=1;
-      bgs[layer].style.backgroundImage=`url("${TMDB_IMG}/w1280${item.backdrop_path}")`;
+      bgs[layer].style.backgroundImage=`url("${lo}")`;
+      const shown=bgs[layer];
+      if(hi)preloadImage(hi).then(ok=>{if(ok&&idx===i&&shown.classList.contains('visible'))shown.style.backgroundImage=`url("${hi}")`;});
       bgs.forEach((b,k)=>b.classList.toggle('visible',k===layer));
     };
-    img.src=`${TMDB_IMG}/w1280${item.backdrop_path}`;
+    img.src=lo;
+    extractPalette(imgBLq(item.backdrop_path)).then(p=>{if(idx===i)applyPalette(el,p);});
     clearInterval(st.spotTimer);
     st.spotTimer=setInterval(()=>{if(S.page===name&&!document.hidden)show((idx+1)%picks.length);},12000);
   }
@@ -350,7 +411,8 @@ function catSpotlight(name,items){
 
 function catOpen(name){
   if(catState[name])return; // already built: the page keeps its place and filters
-  const st=catState[name]={genre:null,sort:'popular',page:1,seen:new Set(),token:0,retry:false,spotDone:false,spotTimer:0};
+  const st=catState[name]={genre:null,sort:'popular',country:null,token:0,retry:false,spotDone:false,spotTimer:0};
+  catReset(st);
   const cfg=CATALOG[name];
   const chips=document.getElementById(`${name}-chips`),sort=document.getElementById(`${name}-sort`),more=document.getElementById(`${name}-more`);
   const press=(wrap,pred)=>wrap.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(pred(b))));
@@ -375,7 +437,18 @@ function catOpen(name){
     b.addEventListener('click',()=>{if(st.sort===val)return;st.sort=val;press(sort,x=>x===b);change();});
     sort.appendChild(b);
   });
-  more.addEventListener('click',()=>catLoad(name,st.retry?st.page>1:true));
+  const country=document.getElementById(`${name}-country`);
+  if(country&&cfg.countries){
+    [['','All countries'],...cfg.countries].forEach(([code,label])=>{
+      const o=document.createElement('option');o.value=code;o.textContent=label;country.appendChild(o);
+    });
+    country.addEventListener('change',()=>{
+      st.country=country.value||null;
+      country.classList.toggle('on',!!st.country);
+      change();
+    });
+  }
+  more.addEventListener('click',()=>catLoad(name,st.shown>0));
   catLoad(name);
 }
 
@@ -1172,35 +1245,90 @@ function preloadImage(url){
 }
 
 /* ══════════════════════════════════════════
-   AMBIENT COLOR
+   PALETTE — the picture's own colours
+   Used by every framed stage (Home hero, catalog spotlights, title page).
+   paletteFromPixels is plain maths on pixel data, so it can be tested without
+   a browser; extractPalette is the small part that touches a canvas.
    ══════════════════════════════════════════ */
-function extractAmbientColor(imgUrl){
-  return new Promise(resolve=>{
+const PALETTE_DEFAULT={tint:[16,13,11],accent:[201,169,110]}; // Watchy's own dark and gold
+function rgbToHsl(r,g,b){
+  r/=255;g/=255;b/=255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2,d=mx-mn;
+  let h=0,s=0;
+  if(d){
+    s=l>.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;
+    h/=6;
+  }
+  return[h,s,l];
+}
+function hslToRgb(h,s,l){
+  if(!s){const v=Math.round(l*255);return[v,v,v];}
+  const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q;
+  const f=t=>{t=(t+1)%1;return t<1/6?p+(q-p)*6*t:t<1/2?q:t<2/3?p+(q-p)*(2/3-t)*6:p;};
+  return[f(h+1/3),f(h),f(h-1/3)].map(v=>Math.round(v*255));
+}
+function paletteFromPixels(d){ // d: RGBA bytes
+  let r=0,g=0,b=0,n=0,best=null,bestScore=0;
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]<200)continue;
+    const R=d[i],G=d[i+1],B=d[i+2];
+    r+=R;g+=G;b+=B;n++;
+    const[,s,l]=rgbToHsl(R,G,B);
+    const score=s*(1-Math.min(1,Math.abs(l-.52)*1.8)); // vivid, and neither near-black nor near-white
+    if(score>bestScore){bestScore=score;best=[R,G,B];}
+  }
+  if(!n)return PALETTE_DEFAULT;
+  const[h,s]=rgbToHsl(r/n,g/n,b/n);
+  // Hardly any colour in the picture (greyscale, almost black): keep Watchy's own palette.
+  if(s<.07&&bestScore<.12)return PALETTE_DEFAULT;
+  // The dark tone keeps the picture's hue but its lightness is fixed low, so
+  // white text on it always has strong contrast whatever the picture is.
+  const tint=hslToRgb(h,Math.min(.55,Math.max(.14,s*.9)),.085);
+  let accent=PALETTE_DEFAULT.accent;
+  if(best){const[ah,as]=rgbToHsl(...best);accent=hslToRgb(ah,Math.min(.85,Math.max(.45,as)),.56);}
+  return{tint,accent};
+}
+const _palCache=new Map();
+function extractPalette(url){
+  if(!url)return Promise.resolve(PALETTE_DEFAULT);
+  if(_palCache.has(url))return _palCache.get(url);
+  const p=new Promise(resolve=>{
     const img=new Image();img.crossOrigin='anonymous';
     img.onload=()=>{
       try{
-        const c=document.createElement('canvas');c.width=8;c.height=4;
-        const ctx=c.getContext('2d');ctx.drawImage(img,0,0,8,4);
-        const d=ctx.getImageData(0,0,8,4).data;
-        let r=0,g=0,b=0,n=0;
-        for(let i=32;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
-        r=Math.round(r/n);g=Math.round(g/n);b=Math.round(b/n);
-        const min=Math.min(r,g,b),boost=1.4;
-        r=Math.min(255,Math.round(min+(r-min)*boost));
-        g=Math.min(255,Math.round(min+(g-min)*boost));
-        b=Math.min(255,Math.round(min+(b-min)*boost));
-        resolve(`${r},${g},${b}`);
-      }catch(_){resolve('201,169,110');}
+        const W=24,H=14,cv=document.createElement('canvas');cv.width=W;cv.height=H;
+        const cx=cv.getContext('2d',{willReadFrequently:true});
+        cx.drawImage(img,0,0,W,H);
+        resolve(paletteFromPixels(cx.getImageData(0,0,W,H).data));
+      }catch(_){resolve(PALETTE_DEFAULT);} // e.g. the canvas was tainted: no harm, default look
     };
-    img.onerror=()=>resolve('201,169,110');
-    img.src=imgUrl;
+    img.onerror=()=>resolve(PALETTE_DEFAULT);
+    img.src=url;
   });
+  _palCache.set(url,p);
+  return p;
+}
+function applyPalette(el,p=PALETTE_DEFAULT){
+  if(!el)return;
+  const[tr,tg,tb]=p.tint,[ar,ag,ab]=p.accent;
+  el.style.setProperty('--tr',tr);el.style.setProperty('--tg',tg);el.style.setProperty('--tb',tb);
+  el.style.setProperty('--ar',ar);el.style.setProperty('--ag',ag);el.style.setProperty('--ab',ab);
 }
 
-
 let _heroBgToggle=false;
+function renderHeroMeta(item){
+  const row=document.getElementById('hero-meta');if(!row)return;
+  row.innerHTML=fmtScore(item.vote_average)||'';
+  const genres=(item.genre_ids||[]).map(id=>GENRE_NAME.get(id))
+    .filter(n=>n&&(n!=='Animation'||item.original_language!=='ja')).slice(0,3).join(', ');
+  [yr(item),genres].filter(Boolean).forEach(t=>{
+    if(row.childNodes.length){const sep=document.createElement('span');sep.className='hero-sep';row.appendChild(sep);}
+    const sp=document.createElement('span');sp.textContent=t;row.appendChild(sp);
+  });
+}
 async function renderHero(item){
-  const bg=imgB(item.backdrop_path);
+  const{lo:bg,hi:bgHi}=backdropSizes(item.backdrop_path);
   // Preload before swapping so the crossfade never reveals a blank/partial frame
   if(bg)await preloadImage(bg);
   if(S.heroItems[S.heroIdx]?.id!==item.id)return; // stale response, hero moved on
@@ -1212,19 +1340,20 @@ async function renderHero(item){
   showing.classList.add('visible');
   hiding.classList.remove('visible');
   _heroBgToggle=!_heroBgToggle;
+  // Sharper copy for big screens: swapped in only if it loads, and only while this slide is still on show.
+  if(bgHi)preloadImage(bgHi).then(ok=>{
+    if(ok&&S.heroItems[S.heroIdx]?.id===item.id&&showing.classList.contains('visible'))showing.style.backgroundImage=`url(${bgHi})`;
+  });
   document.getElementById('hero-greeting').textContent=greeting();
   document.getElementById('hero-title').textContent=ttl(item);
   document.getElementById('hero-type').textContent=mtyp(item)==='tv'?'Series':'Film';
-  document.getElementById('hero-year').textContent=yr(item);
-  document.getElementById('hero-score').innerHTML=fmtScore(item.vote_average);
-  document.getElementById('hero-overview').textContent=(item.overview||'').slice(0,200)+((item.overview?.length||0)>200?'…':'');
+  renderHeroMeta(item);
+  document.getElementById('hero-overview').textContent=item.overview||''; // the stylesheet clamps it at a line end, never mid-word
   document.querySelectorAll('.hero-dot').forEach((d,i)=>d.classList.toggle('active',i===S.heroIdx));
-  if(bg){
-    extractAmbientColor(bg).then(rgb=>{
-      const ambient=document.getElementById('hero-ambient');
-      if(ambient)ambient.style.background=`radial-gradient(ellipse 80% 60% at 20% 80%, rgba(${rgb},.28) 0%, transparent 70%)`;
-    });
-  }
+  // The card takes on the picture's colours (a small copy is read, not the full-size one).
+  const heroEl=document.getElementById('hero');
+  if(bg)extractPalette(imgBLq(item.backdrop_path)).then(p=>{if(S.heroItems[S.heroIdx]?.id===item.id)applyPalette(heroEl,p);});
+  else applyPalette(heroEl);
 
   // Watch Now → Resume, mirroring the title page's logic
   const type=mtyp(item);
@@ -1450,6 +1579,11 @@ async function openTitlePage(item){
     const body=document.querySelector('.tp-body');
     if(body){body.classList.remove('tp-in');void body.offsetWidth;body.classList.add('tp-in');}
   }
+
+  // Stage colours: start from Watchy's own, then take on the backdrop's.
+  const stageEl=document.querySelector('.tp-stage');
+  applyPalette(stageEl);
+  if(item.backdrop_path)extractPalette(imgBLq(item.backdrop_path)).then(p=>{if(S.titleItem===item)applyPalette(stageEl,p);});
 
   // Backdrop — blurred low-res placeholder appears instantly, full-res crossfades in on top
   const tp=document.getElementById('tp-backdrop');
@@ -1870,8 +2004,19 @@ async function openPlayer(item,type,season=1,ep=1,epName=''){
 }
 
 
-let _srcHintTimer=null,_loadToken=0;
+let _srcHintTimer=null,_loadToken=0,_loaderMaxTimer=0,_loaderSlowTimer=0;
+// The loading screen must never outlive a hung embed: an iframe's load event
+// waits for everything the embed pulls in (ad scripts, trackers), so on a slow
+// or blocked one it may never fire, and the loader would sit on top of a
+// player that is actually working. These two limits end it regardless.
+const LOADER_SLOW_MS=5000,LOADER_MAX_MS=7000;
+const clearLoaderTimers=()=>{clearTimeout(_loaderMaxTimer);clearTimeout(_loaderSlowTimer);};
 const SRC_HINT_DEFAULT='Nothing playing? This source may be down.';
+// Opened straight from a file, the page has no real origin, and many embeds
+// refuse to play for such a parent. Say so, instead of leaving it a mystery.
+const srcHintDefault=()=>location.protocol==='file:'
+  ?"Nothing playing? Some sources won't play when Watchy is opened as a local file. Try another source, or open it through a local server."
+  :SRC_HINT_DEFAULT;
 function loadVidSrcWithServer(id,type,season,ep,forceId){
   const wrap=document.getElementById('player-embed-wrap');if(!wrap)return;
   const old=document.getElementById('vidsrc-iframe');
@@ -1879,6 +2024,7 @@ function loadVidSrcWithServer(id,type,season,ep,forceId){
   const loader=document.getElementById('player-loader');
   if(loader)loader.classList.add('on');
   hideSourceHint();
+  clearLoaderTimers();
   const item=S.playerItem;
   const kind=providerKind(item,type);
   const srv=(forceId&&SERVERS.find(x=>x.id===forceId))||activeProvider(item,type);
@@ -1910,6 +2056,11 @@ function loadVidSrcWithServer(id,type,season,ep,forceId){
       if(srv.id==='vidrift')vidriftHandshake(iframe,ctx);
     };
     wrap.appendChild(iframe);
+    _loaderSlowTimer=setTimeout(()=>{
+      const l=document.getElementById('player-loader-label');
+      if(l&&loader?.classList.contains('on'))l.textContent=`Still connecting to ${srv.label}…`;
+    },LOADER_SLOW_MS);
+    _loaderMaxTimer=setTimeout(()=>{if(token===_loadToken&&loader)loader.classList.remove('on');},LOADER_MAX_MS);
     // Some sources silently fail (dead host, blocked embed) without ever
     // erroring — the iframe just sits there. An iframe gives no reliable
     // failure signal, so this only SUGGESTS switching; it never switches or
@@ -1919,6 +2070,7 @@ function loadVidSrcWithServer(id,type,season,ep,forceId){
   };
   const fail=msg=>{
     if(token!==_loadToken)return;
+    clearLoaderTimers();
     if(loader)loader.classList.remove('on');
     showSourceHint(msg);
   };
@@ -1935,7 +2087,7 @@ function loadVidSrcWithServer(id,type,season,ep,forceId){
 }
 function showSourceHint(msg){
   const el=document.getElementById('player-source-hint');if(!el)return;
-  const span=el.querySelector('span');if(span)span.textContent=msg||SRC_HINT_DEFAULT;
+  const span=el.querySelector('span');if(span)span.textContent=msg||srcHintDefault();
   el.classList.add('show');
 }
 function hideSourceHint(){
@@ -1986,6 +2138,7 @@ function stopPlayer(){
   const iframe=document.getElementById('vidsrc-iframe');
   if(iframe){iframe.src='about:blank';iframe.remove();}
   clearTimeout(_cinemaBarTimer);document.getElementById('page-player')?.classList.remove('show-bar');
+  clearLoaderTimers();
   hideSourceHint();
   S.playerSeasons=0;S.playerOpenTime=0;
 }
