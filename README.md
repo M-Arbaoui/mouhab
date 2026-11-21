@@ -30,4 +30,4 @@ Run the built-in Node.js tests with:
 node --test tests/*.test.js
 ```
 
-Check JavaScript syntax with `node --check js/app.js` and `node --check sw.js`.
+Check JavaScript syntax with `node --check js/app.js` and `node --check sw.js`. The page loads `css/style.css` and `js/app.js` directly; there is no minification step.

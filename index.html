@@ -441,26 +441,6 @@
     </div>
   </div>
 
-  <!-- Source selector panel -->
-  <div class="src-panel" id="src-panel" role="tablist" aria-label="Stream sources">
-    <div class="src-panel-head">
-      <div class="src-panel-title">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Stream Sources
-      </div>
-      <button class="src-panel-close" id="server-panel-close" aria-label="Close">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <p class="src-panel-hint">Tap any source to switch instantly. If one fails, try the next.</p>
-    <div class="src-panel-tabs" id="server-switcher"></div>
-    <div class="src-sub" id="src-sub">
-      <span class="src-sub-label">Subtitles</span>
-      <div class="src-sub-opts" role="group" aria-label="Preferred subtitle language"></div>
-      <p class="src-sub-note" id="src-sub-note"></p>
-    </div>
-  </div>
-
   <div class="watch-stage" id="watch-stage">
     <div class="watch-ambient" aria-hidden="true"></div>
     <div class="player-embed-wrap" id="player-embed-wrap">
@@ -477,6 +457,25 @@
   </div>
 
   <div class="watch-col">
+    <!-- Sources: a dock under the player (never over it) -->
+    <section class="src-dock collapsed" id="src-dock" aria-label="Stream sources">
+      <div class="src-dock-head">
+        <div class="src-dock-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Sources <span class="src-dock-count" id="src-count"></span>
+        </div>
+        <div class="src-dock-now" aria-live="polite">Playing <b id="src-now"></b></div>
+        <button class="src-dock-toggle" id="src-expand" type="button" aria-expanded="false" aria-controls="server-switcher">Show all</button>
+      </div>
+      <div class="src-dock-tabs" id="server-switcher" role="tablist" aria-label="Stream sources"></div>
+      <div class="src-sub" id="src-sub">
+        <span class="src-sub-label">Subtitles</span>
+        <div class="src-sub-opts" role="group" aria-label="Preferred subtitle language"></div>
+        <p class="src-sub-note" id="src-sub-note"></p>
+      </div>
+      <p class="src-dock-hint">If a source doesn't play, try the next one. <span class="srv-untested">untested</span> sources were added from their public address and are not confirmed yet.</p>
+    </section>
+
     <!-- Episode controls — TV only -->
     <div class="player-ep-nav" id="player-ep-nav" style="display:none">
       <button class="pep-nav-btn" id="player-prev-btn" title="Previous episode (P)">

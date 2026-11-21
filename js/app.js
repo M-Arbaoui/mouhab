@@ -138,6 +138,7 @@ const A={
   topTV:()=>api('/tv/top_rated').then(d=>d?.results||[]),
   details:(id,t)=>api(`/${t}/${id}`,{append_to_response:'credits,belongs_to_collection'}),
   season:(id,s)=>api(`/tv/${id}/season/${s}`),
+  images:(id,t)=>api(`/${t}/${id}/images`,{include_image_language:'en,null'}),
   search:q=>api('/search/multi',{query:q}).then(d=>(d?.results||[]).filter(r=>r.media_type!=='person')),
   byGenre:g=>api('/discover/movie',{with_genres:g,sort_by:'popularity.desc'}).then(d=>d?.results||[]),
   byGenreType:(g,type)=>Promise.all([
@@ -161,6 +162,71 @@ const imgP=p=>p?`${TMDB_IMG}/w342${p}`:null;
 const imgB=p=>p?`${TMDB_IMG}/w1280${p}`:null;
 const imgBHi=p=>p?`${TMDB_IMG}/original${p}`:null;
 const imgBLq=p=>p?`${TMDB_IMG}/w300${p}`:null;
+
+/* ══════════════════════════════════════════
+   TITLE LOGOS
+   A film's or series' own logo (TMDB's /images) stands where its name was
+   written. The name stays: it is what shows while the logo is on its way,
+   what shows if there is none or it will not load, and the image's alt text.
+   ══════════════════════════════════════════ */
+function pickLogo(logos){
+  if(!Array.isArray(logos))return null;
+  const usable=logos.filter(l=>l&&l.file_path);
+  if(!usable.length)return null;
+  const score=l=>(l.vote_average||0)*10+(l.vote_count||0)*.01+(l.width||0)/10000;
+  const best=arr=>arr.sort((a,b)=>score(b)-score(a))[0];
+  const en=usable.filter(l=>l.iso_639_1==='en'),none=usable.filter(l=>l.iso_639_1==null);
+  return (best(en.length?en:none.length?none:usable)).file_path;
+}
+// Pure: true when what you can actually see of a logo is mostly dark.
+function logoDarkness(d){
+  let n=0,sum=0;
+  for(let i=0;i<d.length;i+=4){
+    const a=d[i+3];if(a<100)continue;
+    n++;sum+=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])*(a/255);
+  }
+  return n>20&&sum/n<70;
+}
+function logoIsDark(img){
+  try{
+    const w=48,h=Math.max(8,Math.round(w*(img.naturalHeight||1)/(img.naturalWidth||1)));
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0,w,h);
+    return logoDarkness(cx.getImageData(0,0,w,h).data);
+  }catch(_){return false;} // cannot read it: leave it as it is
+}
+const _logoCache=new Map();
+function getLogo(item){
+  const type=mtyp(item),key=`${type}:${item.id}`;
+  if(!_logoCache.has(key))_logoCache.set(key,A.images(item.id,type).then(d=>pickLogo(d?.logos)).catch(()=>null));
+  return _logoCache.get(key);
+}
+function renderTitle(el,item){
+  if(!el)return;
+  const key=`${mtyp(item)}:${item.id}`;
+  if(el.dataset.titleKey===key)return; // already showing this title (text or logo): leave it be
+  el.dataset.titleKey=key;
+  const text=ttl(item),token=(el._logoToken||0)+1;el._logoToken=token;
+  el.classList.remove('has-logo');el.textContent=text;
+  el.classList.add('title-wait'); // keep the name hidden for a moment so it does not flash before the logo
+  const show=()=>el.classList.remove('title-wait');
+  const timer=setTimeout(show,350);
+  getLogo(item).then(path=>{
+    if(el._logoToken!==token)return;
+    if(!path){clearTimeout(timer);show();return;}
+    const img=new Image();
+    img.crossOrigin='anonymous'; // lets us look at its colours (a dark logo is lifted to white)
+    img.className='title-logo';img.alt=text;img.decoding='async';
+    img.onload=()=>{
+      if(el._logoToken!==token)return;
+      clearTimeout(timer);
+      if(logoIsDark(img))img.classList.add('logo-dark');
+      el.textContent='';el.appendChild(img);el.classList.add('has-logo');show();
+    };
+    img.onerror=()=>{if(el._logoToken===token){clearTimeout(timer);show();}}; // the name stays
+    img.src=`${TMDB_IMG}/w500${path}`;
+  });
+}
 // Which backdrop to show. w1280 is sharp up to about 1280 physical pixels across;
 // a bigger or denser screen gets the original. The 1280 copy is always shown
 // first and swapped for the original once it has arrived, so choosing the larger
@@ -374,7 +440,7 @@ function catSpotlight(name,items){
     const item=picks[i];idx=i;
     // Everything below goes in as text: titles and summaries come from an external API.
     q('.cat-spot-eyebrow-text').textContent=`Featured ${mtyp(item)==='tv'?'series':'film'}`;
-    q('.cat-spot-title').textContent=ttl(item);
+    renderTitle(q('.cat-spot-title'),item);
     const meta=q('.cat-spot-meta');meta.innerHTML=fmtScore(item.vote_average)||'';
     const bits=[yr(item),(item.genre_ids||[]).map(id=>GENRE_NAME.get(id)).filter(n=>n&&n!=='Animation').slice(0,3).join(', ')].filter(Boolean);
     bits.forEach(t=>{const sep=document.createElement('span');sep.className='hero-sep';const sp=document.createElement('span');sp.textContent=t;meta.append(sep,sp);});
@@ -500,9 +566,9 @@ const SERVERS=[
     tv:(id,s,e)=>`https://v2.vidsrc.me/embed/${id}/${s}-${e}/`,
   },
   {
-    id:'videasy', label:'Videasy', tag:'',
-    movie:id=>`https://player.videasy.net/movie/${id}`,
-    tv:(id,s,e)=>`https://player.videasy.net/tv/${id}/${s}/${e}`,
+    id:'videasy', label:'Videasy', tag:'Updated', untested:true,
+    movie:id=>`https://videasy.xyz/movie/${id}`,
+    tv:(id,s,e)=>`https://videasy.xyz/tv/${id}/${s}/${e}`,
   },
   {
     id:'embed2', label:'2Embed', tag:'',
@@ -525,9 +591,9 @@ const SERVERS=[
     tv:(id,s,e)=>`https://moviesapi.club/tv/${id}-${s}-${e}`,
   },
   {
-    id:'smashystream', label:'SmashyStream', tag:'',
-    movie:id=>`https://player.smashy.stream/movie/${id}`,
-    tv:(id,s,e)=>`https://player.smashy.stream/tv/${id}?s=${s}&e=${e}`,
+    id:'smashystream', label:'SmashyStream', tag:'Updated', untested:true,
+    movie:id=>`https://smashystream.xyz/movie/${id}`,
+    tv:(id,s,e)=>`https://smashystream.xyz/tv/${id}?s=${s}&e=${e}`,
   },
   {
     id:'vidjoy', label:'VidJoy', tag:'',
@@ -535,9 +601,9 @@ const SERVERS=[
     tv:(id,s,e)=>`https://vidjoy.pro/embed/tv/${id}/${s}/${e}`,
   },
   {
-    id:'111movies', label:'111Movies', tag:'',
-    movie:id=>`https://111movies.com/movie/${id}`,
-    tv:(id,s,e)=>`https://111movies.com/tv/${id}/${s}/${e}`,
+    id:'111movies', label:'111Movies', tag:'Updated', untested:true,
+    movie:id=>`https://111movies.net/movie/${id}`,
+    tv:(id,s,e)=>`https://111movies.net/tv/${id}/${s}/${e}`,
   },
   {
     id:'vidrock', label:'VidRock', tag:'',
@@ -584,6 +650,27 @@ const SERVERS=[
     movie:id=>`https://framextv.xyz/embed/${id}?autoplay=1&muted=0`,
     tv:(id,s,e)=>`https://framextv.xyz/embed/${id}/${s}/${e}`,
   },
+  // ── Added from the owner's list ─────────────────────────────────────────
+  // None of these had embed documentation I could read (their sites are
+  // script-rendered pages with no text), so each uses the most common shape,
+  //   movie /movie/{tmdbId}      episode /tv/{tmdbId}/{season}/{episode}
+  // and is marked untested, in the data and in the source list. Nothing about
+  // them is assumed to work. If one shows an error page, its real embed
+  // address replaces the pattern in this one place.
+  ...[
+    ['cinesrc','CineSrc','cinesrc.st'],['vidfast','VidFast','vidfast.vc'],
+    ['embedmaster','EmbedMaster','embedmaster.com'],['vidqueen','VidQueen','vidqueen.st'],
+    ['cinezo','Cinezo','cinezo.st'],['vidy','Vidy','www.vidy.st'],
+    ['vidbolt','VidBolt','vidbolt.pro'],['atlantic','Atlantic','atlantic.bz'],
+    ['aether','Aether','aether.ist'],['stellar','Stellar','stellar.rip'],
+    ['vidmario','VidMario','player.vidmario.net'],['vidspark','VidSpark','vidspark.to'],
+    ['bingr','Bingr','bingr.one'],['peachify','Peachify','peachify.net'],
+    ['cinemaos','CinemaOS','cinemaos.live'],
+  ].map(([id,label,host])=>({
+    id,label,tag:'New',untested:true,
+    movie:tid=>`https://${host}/movie/${tid}`,
+    tv:(tid,s,e)=>`https://${host}/tv/${tid}/${s}/${e}`,
+  })),
   // ani.pm is anime-only (kinds) and needs an AniList id, which TMDB doesn't
   // have — resolveAniPm() looks the title up first, so it returns a Promise.
   { id:'anipm',     label:'AniPM',     tag:'NEW', kinds:['anime'], lang:'sub', resolve:ctx=>resolveAniPm(ctx) },
@@ -601,14 +688,16 @@ const SERVERS=[
    ══════════════════════════════════════════ */
 const WATCHY_ACCENT='C9A96E'; // = --gold in style.css (hex without #, as the embeds expect)
 const PROVIDER_ORDER_BASE=[
-  // Tier 1 — newly integrated
+  // Tier 1 — the two with documentation (VidRift also supplies the suggested pick)
   'vidrift','framextv',
-  // Tier 2 — preferred
+  // The owner's additions, in the order they were given. VidLink was already
+  // here with the same address, so it is listed once, not twice.
+  'cinesrc','smashystream','videasy','111movies','vidfast','embedmaster','vidqueen','cinezo',
+  'vidy','vidbolt','atlantic','aether','stellar','vidmario','vidlink','vidspark','bingr',
+  'peachify','cinemaos',
+  // The rest, as before
   'vidking','vidsrc_xyz','vidsrc_sbs','vidsrc_to','superembed','autoembed',
-  // Tier 3 — alternatives
-  'embedsu','vidsrc2','videasy','embed2','vidnest','vidlink','moviesapi',
-  'smashystream','vidjoy','111movies','vidrock','hexa',
-  // Added later, outside the original tiers
+  'embedsu','vidsrc2','embed2','vidnest','moviesapi','vidjoy','vidrock','hexa',
   'vidora','vidvault','vidapi',
 ];
 const PROVIDER_CONFIG={
@@ -819,7 +908,6 @@ window.addEventListener('message',e=>{
 });
 
 /* ── Routing ── */
-let _pageTransitionTimer=null;
 function goTo(name,skipSave=false,restoreScroll=false){
   if(S.page==='player'&&name!=='player')stopPlayer();
   clearToast();closeSearch();
@@ -828,7 +916,7 @@ function goTo(name,skipSave=false,restoreScroll=false){
   }
 
   const applySwitch=()=>{
-    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active','page-leaving'));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.getElementById(`page-${name}`)?.classList.add('active');
     document.querySelectorAll('.nav-link[data-page]').forEach(l=>l.classList.toggle('active',l.dataset.page===name));
     moveNavUnderline();
@@ -857,20 +945,10 @@ function goTo(name,skipSave=false,restoreScroll=false){
     }
   };
 
-  clearTimeout(_pageTransitionTimer);
-  const current=document.querySelector('.page.active');
-  const reduceMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  // Skip the exit animation when there's nothing visibly changing (first
-  // load, or navigating to the page already showing), and when heading into
-  // the player — the cinematic loader is already fully opaque over the
-  // screen by that point, so an exit fade underneath it would be wasted.
-  if(current&&current.id!==`page-${name}`&&name!=='player'&&!reduceMotion){
-    current.classList.remove('active');
-    current.classList.add('page-leaving');
-    _pageTransitionTimer=setTimeout(applySwitch,150);
-  }else{
-    applySwitch();
-  }
+  // The new page goes on screen at once. (It used to wait for the old one to
+  // fade to black first, which left the screen empty for a moment.) The page
+  // itself eases in from half opacity, so there is never a dark frame between.
+  applySwitch();
 }
 /* ── Nav underline (single shared indicator that slides between links) ── */
 function moveNavUnderline(){
@@ -1184,7 +1262,7 @@ function makeCard(item,opts={}){
     favBtn.setAttribute('aria-label',now?'Remove from My List':'Add to My List');
     favBtn.querySelector('svg').setAttribute('fill',now?'currentColor':'none');
     // Micro-interaction: flip
-    favBtn.animate(
+    favBtn.animate?.(
       [{transform:'rotateY(0)'},{transform:'rotateY(180deg)'},{transform:'rotateY(360deg)'}],
       {duration:420,easing:'cubic-bezier(.34,1.56,.64,1)'}
     );
@@ -1345,7 +1423,7 @@ async function renderHero(item){
     if(ok&&S.heroItems[S.heroIdx]?.id===item.id&&showing.classList.contains('visible'))showing.style.backgroundImage=`url(${bgHi})`;
   });
   document.getElementById('hero-greeting').textContent=greeting();
-  document.getElementById('hero-title').textContent=ttl(item);
+  renderTitle(document.getElementById('hero-title'),item);
   document.getElementById('hero-type').textContent=mtyp(item)==='tv'?'Series':'Film';
   renderHeroMeta(item);
   document.getElementById('hero-overview').textContent=item.overview||''; // the stylesheet clamps it at a line end, never mid-word
@@ -1616,7 +1694,7 @@ async function openTitlePage(item){
   }
 
   // Immediate text
-  document.getElementById('tp-title').textContent=ttl(item);
+  renderTitle(document.getElementById('tp-title'),item);
   renderTitleMeta([yr(item)]);
   document.getElementById('tp-overview').textContent=item.overview||'';
   resetOverviewToggle();
@@ -1657,7 +1735,7 @@ async function openTitlePage(item){
   upFav(isFav(item.id));
   favBtn.onclick=()=>{
     const now=toggleFav(item);upFav(now);
-    favBtn.animate([{transform:'scale(1)'},{transform:'scale(.94)'},{transform:'scale(1)'}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
+    favBtn.animate?.([{transform:'scale(1)'},{transform:'scale(.94)'},{transform:'scale(1)'}],{duration:280,easing:'cubic-bezier(.34,1.56,.64,1)'});
   };
 
   // Fetch details
@@ -1867,7 +1945,7 @@ function setWatchHeader(item,type,season,ep,epName){
 function renderWatchInfo(item,type,details){
   document.getElementById('watch-type').textContent=type==='tv'?'Series':'Movie';
   document.getElementById('watch-score').innerHTML=fmtScore(item.vote_average);
-  document.getElementById('below-title').textContent=ttl(item);
+  renderTitle(document.getElementById('below-title'),item);
   const rt=details?.runtime||details?.episode_run_time?.[0];
   renderTitleMeta([
     yr(item),
@@ -1956,7 +2034,7 @@ function initCinema(){
 
 async function openPlayer(item,type,season=1,ep=1,epName=''){
   // Show cinematic loader with title backdrop
-  const loaderEl=showCinematicLoader();
+  showCinematicLoader();
   const bg=imgB(item.backdrop_path);
   updateCinematicLoader(20,`Loading ${ttl(item)}…`,bg);
 
@@ -2183,19 +2261,30 @@ function buildServerSwitcher(){
     const isActive=srv.id===activeId,isRec=!!rec&&srv.id===rec.id,meta=providerMeta(srv);
     const btn=document.createElement('button');
     btn.className=`server-opt${isActive?' active':''}`;
+    btn.type='button';
     btn.setAttribute('role','tab');
     btn.setAttribute('aria-selected',isActive?'true':'false');
     btn.dataset.id=srv.id;
     btn.title=[
       isRec&&"Suggested: first in Watchy's configured order for this kind of title. Not a measured result.",
+      srv.untested&&"Untested: added from its public address, using the common embed shape. If it shows an error page, try another source.",
       meta.custom&&`Branding: ${meta.custom}`,
       `Arabic subtitles: ${meta.arabic||SUB_NOTE_DEFAULT}`,
       meta.ads&&'Shows an ad',
     ].filter(Boolean).join('\n');
-    btn.innerHTML=`<span class="srv-name">${srv.label}</span><span class="srv-tag">${srv.tag||''}</span>${isRec?'<span class="srv-rec">Suggested</span>':''}`;
-    btn.addEventListener('click',()=>setServer(srv.id)); // panel stays open for quick switching
+    const name=document.createElement('span');name.className='srv-name';name.textContent=srv.label;
+    const tags=document.createElement('span');tags.className='srv-tags';
+    const add=(cls,text)=>{const t=document.createElement('span');t.className=cls;t.textContent=text;tags.appendChild(t);};
+    if(isRec)add('srv-rec','Suggested');
+    if(srv.tag)add('srv-tag',srv.tag);
+    if(srv.untested)add('srv-untested','untested');
+    btn.append(name,tags);
+    btn.addEventListener('click',()=>setServer(srv.id)); // the dock stays as it is: quick switching
     container.appendChild(btn);
   });
+  const count=document.getElementById('src-count'),now=document.getElementById('src-now');
+  if(count)count.textContent=String(list.length);
+  if(now)now.textContent=(list.find(x=>x.id===activeId)||{}).label||'';
   buildSubLangRow();
 }
 function buildSubLangRow(){
@@ -2220,16 +2309,24 @@ function buildSubLangRow(){
     _subLang==='ar'?"This source uses its own subtitle menu, so Arabic can't be confirmed. For anime, AniPM requests Arabic directly.":
     'This source uses its own subtitle menu.';
 }
+/* The sources sit in a dock under the player (not a panel over it): two rows
+   showing, the rest one press away, and nothing is ever covered. */
+const srcDockOpen=()=>document.getElementById('src-dock')?.classList.contains('collapsed')===false;
+function setSrcDock(open){
+  const dock=document.getElementById('src-dock');if(!dock)return;
+  dock.classList.toggle('collapsed',!open);
+  const t=document.getElementById('src-expand');
+  if(t){t.textContent=open?'Show fewer':'Show all';t.setAttribute('aria-expanded',String(open));}
+  document.getElementById('server-panel-toggle')?.setAttribute('aria-expanded',String(open));
+}
 function openSrcPanel(){
-  const p=document.getElementById('src-panel');if(!p)return;
-  p.classList.add('open');
-  setTimeout(()=>p.querySelector('.server-opt')?.focus(),50);
+  const dock=document.getElementById('src-dock');if(!dock)return;
+  setSrcDock(true);
+  dock.scrollIntoView({block:'nearest',behavior:'smooth'});
+  setTimeout(()=>(dock.querySelector('.server-opt.active')||dock.querySelector('.server-opt'))?.focus({preventScroll:true}),60);
 }
-function closeSrcPanel(){document.getElementById('src-panel')?.classList.remove('open');}
-function toggleSrcPanel(){
-  const p=document.getElementById('src-panel');if(!p)return;
-  p.classList.contains('open')?closeSrcPanel():openSrcPanel();
-}
+function closeSrcPanel(){setSrcDock(false);}
+function toggleSrcPanel(){srcDockOpen()?closeSrcPanel():openSrcPanel();}
 
 /* ══════════════════════════════════════════
    EPISODE PANEL IN PLAYER
@@ -2336,9 +2433,9 @@ function initKeyboard(){
       if(e.code==='KeyF'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();toggleFullscreen();}
       if(e.code==='KeyT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();toggleCinema();}
       if(e.code==='Escape'){
-        // Esc closes the innermost thing first: the source panel, then cinematic
+        // Esc closes the innermost thing first: the expanded sources, then cinematic
         // mode. (In real fullscreen the browser handles Esc itself.)
-        if(document.getElementById('src-panel')?.classList.contains('open'))closeSrcPanel();
+        if(srcDockOpen())closeSrcPanel();
         else if(_cinema&&!fsElement())toggleCinema();
       }
     }
@@ -2426,6 +2523,7 @@ async function shareCard(item){
   const W=1080,H=1350;
   const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext('2d');
+  if(!ctx){showToast('Could not create the card');return;}
   ctx.fillStyle='#09090B';ctx.fillRect(0,0,W,H);
   if(posterURL){
     try{
@@ -2534,29 +2632,22 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('search-icon-btn').addEventListener('click',openSearch);
   document.getElementById('search-overlay-close')?.addEventListener('click',closeSearch);
   document.getElementById('search-overlay-backdrop')?.addEventListener('click',closeSearch);
+  // Escape closes the search even while typing in it (the global key handler ignores keys typed into fields).
+  document.getElementById('search-overlay-input')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();closeSearch();}});
   document.getElementById('search-overlay-input')?.addEventListener('input',e=>{handleSearchInput(e.target.value);clearSearchOnEmpty(e.target.value);});
   document.querySelectorAll('.search-filter-btn').forEach(b=>b.addEventListener('click',()=>setSearchFilter(b.dataset.f)));
   // Server panel
   buildServerSwitcher();
   document.getElementById('server-panel-toggle')?.addEventListener('click',toggleSrcPanel);
-  document.getElementById('server-panel-close')?.addEventListener('click',closeSrcPanel);
-  document.addEventListener('click',e=>{
-    if(!e.target.closest('#src-panel')&&!e.target.closest('#server-panel-toggle'))closeSrcPanel();
+  document.getElementById('src-expand')?.addEventListener('click',()=>setSrcDock(!srcDockOpen()));
+  document.getElementById('src-dock')?.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&srcDockOpen()){closeSrcPanel();return;}
+    const items=[...document.querySelectorAll('#src-dock .server-opt')];
+    const idx=items.indexOf(document.activeElement);if(idx<0)return;
+    const move=d=>{e.preventDefault();items[(idx+d+items.length)%items.length]?.focus();};
+    if(e.key==='ArrowRight'||e.key==='ArrowDown')move(1);
+    if(e.key==='ArrowLeft'||e.key==='ArrowUp')move(-1);
   });
-  document.getElementById('src-panel')?.addEventListener('keydown',e=>{
-    if(e.key==='Escape')closeSrcPanel();
-    const items=[...document.querySelectorAll('.server-opt')];
-    const idx=items.indexOf(document.activeElement);
-    if(e.key==='ArrowDown'){e.preventDefault();items[(idx+1)%items.length]?.focus();}
-    if(e.key==='ArrowUp'){e.preventDefault();items[(idx-1+items.length)%items.length]?.focus();}
-  });
-  const srcBtn=document.getElementById('server-panel-toggle');
-  const srcPanel=document.getElementById('src-panel');
-  if(srcBtn&&srcPanel){
-    new MutationObserver(()=>{
-      srcBtn.setAttribute('aria-expanded',srcPanel.classList.contains('open').toString());
-    }).observe(srcPanel,{attributes:true,attributeFilter:['class']});
-  }
   // Setup
   setupGenres();initKeyboard();bindOverviewToggle('tp-overview','tp-more');bindOverviewToggle('watch-overview','watch-more');initRipple();initRailArrows();initLogoSpotlight();initPlayerFullscreen();initCinema();
   document.fonts?.ready.then(moveNavUnderline);

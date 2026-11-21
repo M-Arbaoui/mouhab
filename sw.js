@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════
-   Watchy. — Service Worker v5
+   Watchy. — Service Worker v6
    Cache-first: app shell + images
    Network-first: TMDB API
    Never cache: stream embeds
    ═══════════════════════════════════════════════ */
-const CACHE     = 'watchy-shell-v5';
-const API_CACHE = 'watchy-api-v5';
-const IMG_CACHE = 'watchy-img-v5';
+const CACHE     = 'watchy-shell-v6';
+const API_CACHE = 'watchy-api-v6';
+const IMG_CACHE = 'watchy-img-v6';
 
 const SHELL = [
   './',
   './index.html',
-  './css/style.min.css',
-  './js/app.min.js',
+  './css/style.css',
+  './js/app.js',
   './manifest.json',
   './og-image.png',
   './icon-192.png',
@@ -20,10 +20,13 @@ const SHELL = [
 ];
 
 const EMBED_HOSTS = new Set([
-  'vidsrc.to','vidsrc.xyz','2embed.cc',
-  'vidking.net','ezvidapi.com','streamdb.dev',
-  'videasy.net','vidnest.online','p-stream.co',
-  'vidrift.net','ani.pm','framextv.xyz','framextv.cc',
+  'vidsrc.to','vidsrc.xyz','vidsrc.sbs','vidsrc.me','2embed.cc',
+  'vidking.net','ezvidapi.com','streamdb.dev','multiembed.mov',
+  'videasy.net','vidnest.online','p-stream.co','autoembed.cc',
+  'embed.su','vidlink.pro','moviesapi.club','smashy.stream',
+  'vidjoy.pro','111movies.com','vidrock.net','hexa.su','vidora.su',
+  'vidvault.to','vidapi.ru','vidrift.net','ani.pm',
+  'framextv.xyz','framextv.cc',
   'youtube.com','youtube-nocookie.com','youtu.be',
 ]);
 

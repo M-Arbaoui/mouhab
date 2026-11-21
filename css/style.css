@@ -1,4 +1,4 @@
-/* ═══════════════════════════════════════════════
+push /* ═══════════════════════════════════════════════
    Watchy. — style.css v14
    Classic · Luxe · Elegant — a refined pass over the
    existing dark + gold + serif identity, not a rebuild.
@@ -92,24 +92,20 @@ select{appearance:none;-webkit-appearance:none}
 
 /* ════════════════════════════════
    PAGE TRANSITIONS
+   A page change is a cut with a soft arrival: the new page is on screen
+   immediately and settles in from half opacity. Nothing fades to black first
+   and nothing starts from nothing, so there is no dark moment in between.
 ════════════════════════════════ */
-.page{display:none;animation:pgIn .35s var(--ease) both}
+.page{display:none;animation:pgIn .3s var(--ease) both}
 .page.active{display:block}
-@keyframes pgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pgIn{from{opacity:.5;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* Exit motion — display:none can't be animated, so a page leaving still
-   needs a brief moment with .page-leaving applied (and .active removed but
-   display still overridden to block) before it's actually torn down, or it
-   would just vanish with no exit feel at all. */
-.page.page-leaving{display:block;animation:pgOut .16s var(--ease) both}
-@keyframes pgOut{to{opacity:0;transform:translateY(-8px)}}
-
-/* Title page gets a more cinematic reveal — fade + gentle scale + light blur,
-   like a shot pulling into focus, rather than the generic page slide-up. */
-#page-title.active{animation:pgInCinematic .45s var(--ease) both}
+/* The title page settles in with the faintest scale, no blur (blur made it
+   look dark and soft for the first half second, and costs GPU time). */
+#page-title.active{animation:pgInCinematic .4s var(--ease) both}
 @keyframes pgInCinematic{
-  from{opacity:0;transform:scale(1.015);filter:blur(6px)}
-  to{opacity:1;transform:scale(1);filter:blur(0)}
+  from{opacity:.55;transform:scale(1.012)}
+  to{opacity:1;transform:scale(1)}
 }
 
 /* ════════════════════════════════
@@ -1445,71 +1441,51 @@ select{appearance:none;-webkit-appearance:none}
   display:inline-block;flex-shrink:0;
 }
 
-/* Source panel — tab style */
-.src-panel{
-  position:absolute;top:60px;right:16px;z-index:100;
-  width:min(440px,calc(100vw - 32px));
-  background:rgba(9,9,11,.98);backdrop-filter:blur(28px);
-  border:1px solid var(--border2);border-radius:var(--r-lg);
-  box-shadow:var(--shadow-lg);
-  opacity:0;pointer-events:none;
-  transform:translateY(-8px) scale(.97);
-  transition:opacity .22s var(--ease),transform .22s var(--ease);
+/* ── Sources: a dock under the player ──
+   Not a panel over the page. Two rows show (the newest sources are first, so
+   they are right there), "Show all" opens the rest in place and pushes the
+   page down instead of covering it. */
+.src-dock{
+  margin:18px 60px 0;padding:14px 16px 12px;
+  border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.025);
 }
-.src-panel.open{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
-.src-panel-head{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 16px 10px;border-bottom:1px solid var(--border);
+.src-dock-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.src-dock-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--text)}
+.src-dock-title svg{color:var(--gold)}
+.src-dock-count{font-size:11px;font-weight:400;color:var(--text3);padding:1px 8px;border-radius:999px;border:1px solid var(--border2)}
+.src-dock-now{font-size:12px;color:var(--text2);margin-left:auto}
+.src-dock-now b{font-weight:500;color:var(--gold)}
+.src-dock-toggle{
+  padding:6px 14px;border-radius:999px;border:1px solid var(--border2);
+  font-size:12px;color:var(--text2);
+  transition:color .18s,border-color .18s,background .18s;
 }
-.src-panel-title{
-  display:flex;align-items:center;gap:7px;
-  font-size:13px;font-weight:500;color:var(--text2);
-}
-.src-panel-close{
-  width:26px;height:26px;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  color:var(--text3);transition:color .15s,background .15s;
-}
-.src-panel-close:hover{color:var(--text);background:rgba(255,255,255,.07)}
-.src-panel-hint{
-  padding:8px 16px;font-size:11px;color:var(--text3);
-  border-bottom:1px solid var(--border);
-}
-.src-panel-tabs{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
-  padding:12px;max-height:min(360px,50vh);overflow-y:auto;
+.src-dock-toggle:hover{color:var(--gold);border-color:rgba(201,169,110,.4)}
+.src-dock-toggle:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.src-dock-tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:8px}
+.src-dock.collapsed .src-dock-tabs{
+  max-height:88px;overflow:hidden; /* two rows */
+  -webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent);
+  mask-image:linear-gradient(to bottom,#000 62%,transparent);
 }
 .server-opt{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  min-height:58px;padding:14px 8px 10px;border-radius:var(--r);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  min-height:40px;padding:0 12px;border-radius:10px;text-align:left;
   background:var(--card);border:1px solid var(--border);
-  font-size:12px;color:var(--text2);
-  transition:border-color .18s,color .18s,background .18s;
-  position:relative;cursor:pointer;
+  font-size:12.5px;color:var(--text2);
+  transition:border-color .18s,background .18s,color .18s;
 }
-.server-opt:hover{border-color:var(--border2);background:var(--card-h)}
-/* One active treatment only: gold border + tint. */
-.server-opt.active{
-  border-color:rgba(201,169,110,.5);background:var(--gold-dim);color:var(--gold);
-}
+.server-opt:hover{border-color:var(--border2);background:var(--card-h);color:var(--text)}
+.server-opt.active{border-color:rgba(201,169,110,.55);background:var(--gold-dim);color:var(--gold)}
 .server-opt:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.srv-name{font-size:12px;font-weight:500;text-align:center}
-/* The tag line is always reserved, so every card is the same height whether
-   or not it carries a label. */
-.srv-tag{
-  display:block;min-height:11px;line-height:11px;
-  font-size:9px;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--gold);opacity:.8;
-}
-/* Shown on the one suggested source only. */
-.srv-rec{
-  position:absolute;top:5px;right:7px;
-  font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);
-}
-.server-opt.active .srv-rec{color:var(--gold)}
-
-/* Subtitle language preference */
-.src-sub{padding:4px 12px 12px;border-top:1px solid var(--border)}
+.srv-name{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srv-tags{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.srv-tag,.srv-rec,.srv-untested{font-size:9px;letter-spacing:.08em;text-transform:uppercase;line-height:1}
+.srv-tag{color:var(--gold);opacity:.85}
+.srv-rec{color:var(--score-good)}
+.srv-untested{color:var(--text3)}
+.src-dock-hint{margin-top:10px;font-size:11px;line-height:1.5;color:var(--text3)}
+.src-sub{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
 .src-sub-label{
   display:block;margin-top:10px;
   font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-muted);
@@ -1758,7 +1734,9 @@ select{appearance:none;-webkit-appearance:none}
   .player-topbar-logo{display:none}
   .watch-stage{padding:0}
   .player-embed-wrap{border-radius:0;border-left:0;border-right:0;max-height:none}
-  .src-panel{top:56px}
+  .src-dock{margin:14px 16px 0;padding:12px}
+  .src-dock-tabs{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
+  .src-dock-now{margin-left:0;order:3;width:100%}
   .player-ep-nav{padding:14px 16px 0;gap:6px}
   .pep-nav-btn,.pep-nav-eps-btn{padding:0 12px}
   .watch-info,.watch-eps{padding:0 16px}
@@ -1806,8 +1784,6 @@ select{appearance:none;-webkit-appearance:none}
   
   
   
-  .src-panel{right:8px;width:calc(100vw - 16px)}
-  .src-panel-tabs{grid-template-columns:repeat(2,1fr)}
   .tp-eps-head{gap:10px}
   .tp-season-pill{padding:6px 13px;font-size:12px}
   .player-ep-counter{font-size:11px}
@@ -1844,3 +1820,25 @@ select{appearance:none;-webkit-appearance:none}
 .to-top:hover{border-color:var(--gold)}
 .to-top:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(max-width:800px){.to-top{right:16px;bottom:88px}}
+
+/* ════════════════════════════════
+   TITLE LOGOS — a film's own logo where its name was written
+════════════════════════════════ */
+.title-wait{visibility:hidden}
+.has-logo{font-size:0;line-height:0;letter-spacing:0;text-shadow:none}
+.title-logo{
+  display:block;width:auto;height:auto;object-fit:contain;object-position:left center;
+  max-width:min(100%,520px);max-height:140px;
+  filter:drop-shadow(0 2px 14px rgba(0,0,0,.5));
+}
+/* black or very dark logos would vanish on a dark card: shown as white instead */
+.title-logo.logo-dark{filter:brightness(0) invert(1) drop-shadow(0 2px 14px rgba(0,0,0,.5))}
+.hero-title .title-logo{max-width:min(100%,600px);max-height:clamp(90px,17vh,170px)}
+.cat-spot-title .title-logo{max-width:min(100%,440px);max-height:clamp(70px,13vh,120px)}
+.tp-title .title-logo{max-width:min(100%,520px);max-height:clamp(80px,15vh,140px)}
+.watch-title .title-logo{max-width:min(100%,420px);max-height:90px}
+@media(max-width:800px){
+  .hero-title .title-logo{max-height:100px;max-width:100%}
+  .cat-spot-title .title-logo{max-height:76px}
+  .tp-title .title-logo{max-height:84px}
+}
