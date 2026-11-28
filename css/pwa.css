@@ -1,0 +1,18 @@
+html{overscroll-behavior-y:none}
+#pwa-install{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:0 18px;height:44px;border-radius:999px;background:rgba(255,255,255,.07);color:var(--gold);font-size:13px;font-weight:500}
+.is-standalone body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.is-standalone input,.is-standalone textarea{-webkit-user-select:text;user-select:text}
+@media(max-width:768px){
+ /* 44px touch targets without changing the look */
+ .card-fav::after{content:"";position:absolute;inset:-8px}
+ .bot-nav{padding-top:6px}
+ .bot-nav-item{min-width:64px;min-height:48px;justify-content:center;position:relative;font-size:11px;gap:3px}
+ .bot-nav-item svg{width:24px;height:24px;stroke-width:1.6}
+ .bot-nav-item.active::after{content:"";position:absolute;top:-7px;left:50%;width:18px;height:3px;margin-left:-9px;border-radius:2px;background:var(--gold)}
+ /* round back button, level with search */
+ #tp-back-btn,#person-back-btn{width:44px;height:44px;padding:0;border-radius:50%!important;font-size:0!important;justify-content:center;gap:0}
+ #tp-back-btn svg,#person-back-btn svg{width:20px;height:20px}
+ #tp-back-btn{top:70px!important;left:20px!important;position:absolute;background:rgba(0,0,0,.5)!important}
+ .nav-search-btn,#search-icon-btn{min-width:44px;min-height:44px}
+ .tp-poster-wrap{margin-top:56px}
+}

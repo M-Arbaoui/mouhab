@@ -1,0 +1,185 @@
+/* Watchy. — UX enhancement layer (loads after style.min.css).
+   Same theme and tokens; only readability, feedback, focus and touch polish. */
+
+:root{
+  --text3:#7C7C86;            /* was #52525B: too dim for years, meta, captions */
+  --ease-out:cubic-bezier(.22,.8,.3,1);
+}
+
+html{scroll-behavior:smooth;-webkit-tap-highlight-color:transparent;text-rendering:optimizeLegibility}
+::selection{background:rgba(var(--gold-rgb),.32);color:#fff}
+body{-webkit-font-smoothing:antialiased}
+
+/* ── Hero: legibility over bright artwork ── */
+.hero-overview{color:#C3C2C8;text-shadow:0 1px 14px rgba(0,0,0,.65)}
+.hero-meta{color:#A9A9B2;text-shadow:0 1px 10px rgba(0,0,0,.6)}
+.hero-title{text-shadow:0 2px 24px rgba(0,0,0,.35)}
+
+/* ── Cards: clearer titles/meta, calmer hover, focus ring ── */
+.card-meta{color:var(--text3)}
+.card:hover .card-img-w{border-color:rgba(var(--gold-rgb),.34)}
+.card:active{transform:translateY(-2px) scale(1.01)}
+.card:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:12px}
+.card-img-w{transition:box-shadow .3s var(--ease-out),border-color .3s var(--ease-out)}
+
+/* ── Rails: snap to cards, keep first card aligned with the page edge ── */
+.rail{scroll-snap-type:x proximity;scroll-padding-left:60px;overscroll-behavior-x:contain}
+.rail>.card{scroll-snap-align:start}
+@media(max-width:768px){.rail{scroll-padding-left:16px}}
+
+/* ── Chip rows: show that they scroll (soft fade on the right edge) ── */
+.cat-chips,.mood-bar{
+  scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);
+          mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);
+}
+.cat-chips{padding-right:32px}
+.mood-bar{padding-right:48px}
+.cat-chips>*,.mood-bar>*{scroll-snap-align:start}
+.cat-chip{min-height:34px}
+.cat-chip:hover{color:var(--text);border-color:var(--border2)}
+.cat-chip:active{transform:scale(.97)}
+
+/* ── Buttons: tactile press feedback ── */
+.btn-primary:hover{box-shadow:0 8px 28px rgba(12,9,5,.45)}
+.btn-primary:active,.btn-ghost:active{transform:scale(.97)}
+.btn-ghost:hover{border-color:rgba(var(--gold-rgb),.45);background:rgba(255,255,255,.1)}
+
+/* ── Nav: better hit areas and visible keyboard focus ── */
+.nav-link:hover{color:#fff}
+.nav-link:focus-visible,.nav-search-btn:focus-visible,.nav-logo:focus-visible,
+.cat-chip:focus-visible,.btn-primary:focus-visible,.btn-ghost:focus-visible,
+.to-top:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.nav-search-btn,.search-overlay-close{min-width:40px;min-height:40px}
+
+/* ── Section headers: a touch more breathing room ── */
+.section-title{letter-spacing:.025em}
+.section-head{margin-bottom:14px}
+
+/* ── Back-to-top: stays clear of the mobile tab bar ── */
+@media(max-width:768px){.to-top{bottom:calc(84px + env(safe-area-inset-bottom,0px));right:16px}}
+
+/* ── Mobile: comfortable touch targets for chips and sort pills ── */
+@media(max-width:768px){
+  .cat-chip{min-height:38px;padding:8px 15px}
+  .cat-country{min-height:40px}
+}
+
+/* ── Images fade in instead of popping ── */
+.card-img{transition:opacity .4s ease}
+
+/* ── Respect reduced-motion preference ── */
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ═══ Skeleton loading (replaces "Loading…" text and spinners; same card tone) ═══ */
+@keyframes wsk{0%{background-position-x:150%}100%{background-position-x:-50%}}
+.sk,.hero-sk{display:block;border-radius:6px;background-color:var(--card);
+  background-image:linear-gradient(90deg,var(--card) 0,rgba(255,255,255,.07) 50%,var(--card) 100%);
+  background-size:200% 100%;animation:wsk 1.8s linear infinite}
+.sk-title{width:min(340px,70%);height:44px;border-radius:8px;margin-bottom:18px}
+.sk-meta{width:210px;height:14px;margin-bottom:18px}
+.sk-line{height:13px;margin-bottom:10px;max-width:520px}
+.sk-line:nth-child(1){width:96%}.sk-line:nth-child(2){width:88%}.sk-line:nth-child(3){width:58%}
+.hero-overview .sk-line{margin-bottom:9px}
+
+/* Episode list loading: shimmer rows instead of centered text */
+.ep-loading{font-size:0;height:216px;padding:0;position:relative;color:transparent}
+.ep-loading::before{content:"";position:absolute;inset:8px 0;border-radius:10px;
+  background-image:
+    linear-gradient(90deg,var(--card) 0,rgba(255,255,255,.07) 50%,var(--card) 100%),
+    linear-gradient(90deg,var(--card) 0,rgba(255,255,255,.07) 50%,var(--card) 100%),
+    linear-gradient(90deg,var(--card) 0,rgba(255,255,255,.07) 50%,var(--card) 100%);
+  background-size:200% 64px,200% 64px,200% 64px;
+  background-position:0 0,0 76px,0 152px;background-repeat:no-repeat;animation:wsk 1.8s linear infinite;
+  -webkit-mask-image:none;mask-image:none}
+
+/* "Load more" button: shimmer while loading, no spinner */
+.cat-more .load-more-spinner{display:none!important}
+.cat-more.is-loading{color:var(--gold-muted);
+  background-image:linear-gradient(90deg,transparent 0,rgba(var(--gold-rgb),.16) 50%,transparent 100%);
+  background-size:200% 100%;animation:wsk 1.4s linear infinite}
+
+/* Continue Watching: label + clear affordance */
+.cont-item .card-meta{color:var(--text3)}
+.cont-item .cont-left{font-size:11px;color:var(--gold-muted);margin-top:2px}
+.section-clear-btn:hover{color:var(--text)}
+@media(prefers-reduced-motion:reduce){.sk,.hero-sk,.cat-more.is-loading,.ep-loading::before{animation:none}}
+
+/* ═══ Poster loading: never show a blank hole ═══
+   Cards whose poster has not arrived yet shimmer (same tone as card skeletons).
+   If the poster really cannot load after retries, a quiet film icon is shown. */
+.card-img-w:not(.loaded):not(.img-failed):not(:has(.card-ph)){
+  background-image:linear-gradient(90deg,var(--card) 0,rgba(255,255,255,.07) 50%,var(--card) 100%);
+  background-size:200% 100%;animation:wsk 1.8s linear infinite}
+.card-img-w.img-failed::after{content:"";position:absolute;inset:0;margin:auto;width:28px;height:28px;opacity:.35;
+  background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C9A96E' stroke-width='1'%3E%3Crect x='2' y='2' width='20' height='20' rx='3'/%3E%3Cpath d='m7 8 4 3-4 3V8z'/%3E%3C/svg%3E")}
+@media(prefers-reduced-motion:reduce){.card-img-w:not(.loaded){animation:none}}
+
+:root{--gold-rgb:201,169,110;--bg-rgb:9,9,11}  /* colour channels used by style.min.css */
+
+/* AMOLED: true black */
+:root{--bg:#000;--bg-rgb:0,0,0;--surface:rgba(0,0,0,.94);--surface2:#080808;--card:#0d0d0d;--card-h:#151515;--border:rgba(247,240,227,.07)}
+body{background:#000}
+
+/* ═══ Hero: My List button ═══ */
+#hero-list-btn[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.hero-actions{flex-wrap:wrap;row-gap:10px}
+
+/* ═══ Poster hover info: rating, genre, year ═══ */
+.card-ov{align-items:flex-end;justify-content:flex-start;background:linear-gradient(to top,rgba(var(--bg-rgb),.9) 0,rgba(var(--bg-rgb),.35) 55%,rgba(var(--bg-rgb),.1) 100%)}
+.card-ov:has(.card-play-icon){align-items:center;justify-content:center}
+.card-ov-info{position:absolute;left:10px;right:10px;bottom:12px;pointer-events:none;display:flex;flex-direction:column;gap:3px;
+  font-size:11px;color:#E7E5DF;text-shadow:0 1px 8px rgba(0,0,0,.8);transform:translateY(6px);transition:transform .25s var(--ease-out)}
+.card:hover .card-ov-info,.card:focus-visible .card-ov-info{transform:none}
+.card-ov-info b{font-weight:600;color:var(--gold-light);font-size:12px}
+.card-ov-info span{opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card:has(.card-prog-bar) .card-ov-info{bottom:22px}
+.card:has(.card-type-pill) .card-ov-info{bottom:42px}   /* keep clear of the SERIES badge */
+@media(hover:none) and (pointer:coarse){.card-ov-info{display:none}}
+
+/* ═══ Filters: year + rating ═══ */
+.cat-bar-end .cat-filter{height:34px}
+.card.f-hide{display:none!important}
+.cat-bar-end{flex-wrap:wrap}
+
+/* ═══ Infinite scroll: the button becomes a quiet end-of-list loader ═══ */
+.cat-more-wrap.auto .cat-more{opacity:.55;min-width:0;padding:9px 22px;font-size:12px}
+.cat-more-wrap.auto .cat-more.is-loading{opacity:1}
+
+/* ═══ Top 10 ═══ */
+.top10-tag{display:inline-block;margin-left:10px;padding:3px 9px;border-radius:999px;font:600 10px var(--font-s);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--gold);background:var(--gold-dim);border:1px solid rgba(var(--gold-rgb),.4);vertical-align:middle}
+.rank-badge{width:30px;height:30px;font-size:11px}
+
+/* ═══ Cleaner posters: no rating pill on cards (rating stays on the detail page and in the rating filter) ═══ */
+.card .card-score{display:none!important}
+.card .card-new-badge{top:8px}
+
+/* ── Premium finish, all themes ── */
+.card-img-w{border-color:var(--border2)}
+.section-head{align-items:baseline}
+.section-title{font-weight:500}
+.cat-bar{backdrop-filter:blur(14px) saturate(1.3);box-shadow:0 10px 24px -18px rgba(0,0,0,.5)}
+.cat-chip.active,.cat-chip[aria-pressed="true"]{box-shadow:0 0 0 1px rgba(var(--gold-rgb),.35) inset}
+.nav.scrolled::after{opacity:.8}
+.card-img{border-radius:inherit}
+
+
+/* Rating appears on hover only, as a small gold pill (desktop). Touch devices have no hover, so it is skipped there. */
+.card-ov-info .ov-rate{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;margin-bottom:3px;padding:3px 9px;border-radius:999px;
+  background:rgba(9,9,11,.72);border:1px solid rgba(201,169,110,.5);color:#D4B483;font-size:11.5px;font-weight:600;letter-spacing:.02em;text-shadow:none}
+.card-ov-info .ov-rate svg{color:#C9A96E}
+
+/* ═══ Watch page: clean sources dock ═══ */
+.src-dock{background:transparent;border-color:var(--border)}
+.src-dock-tabs{display:flex;flex-wrap:wrap;gap:8px}
+.src-dock.collapsed .src-dock-tabs{max-height:none;overflow:visible;-webkit-mask-image:none;mask-image:none}
+.src-dock.collapsed .server-opt.srv-extra{display:none}
+.src-dock .server-opt{flex:0 0 auto;min-height:36px;padding:0 16px;border-radius:999px;gap:10px}
+.src-dock.no-extra .src-dock-toggle{display:none}
+.src-dock-hint{display:none}
+.src-dock:not(.collapsed) .src-dock-hint{display:block}
+@media(max-width:768px){.src-dock .server-opt{padding:0 13px}}
