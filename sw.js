@@ -4,19 +4,29 @@
    Network-first: TMDB API
    Never cache: stream embeds
    ═══════════════════════════════════════════════ */
-const CACHE     = 'watchy-shell-v6';
-const API_CACHE = 'watchy-api-v6';
-const IMG_CACHE = 'watchy-img-v6';
+const CACHE     = 'watchy-shell-v18G';
+const API_CACHE = 'watchy-api-v18G';
+const IMG_CACHE = 'watchy-img-v18G';
 
 const SHELL = [
   './',
   './index.html',
-  './css/style.css',
-  './js/app.js',
+  './css/style.min.css',
+  './css/enhance.css',
+  './css/heroG.css',
+  './css/titleV.css',
+  './css/pwa.css',
+  './js/app.min.js',
+  './js/enhance.js',
+  './js/heroG.js',
+  './js/pwa.js',
   './manifest.json',
   './og-image.png',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png',
+  './apple-touch-icon.png',
 ];
 
 const EMBED_HOSTS = new Set([
@@ -33,7 +43,7 @@ const EMBED_HOSTS = new Set([
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(SHELL))
+      .then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => {}))))
       .then(() => self.skipWaiting())
   );
 });
@@ -125,7 +135,7 @@ async function shellNetworkFirst(req) {
     return res;
   } catch(_) {
     clearTimeout(timer);
-    return (await cache.match(req)) ||
+    return (await cache.match(req)) || (req.mode === 'navigate' && (await cache.match('./index.html'))) ||
       new Response('', { status: 503, statusText: 'Offline' });
   }
 }

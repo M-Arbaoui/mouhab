@@ -1,0 +1,18 @@
+/* V1 Clean Cinema */
+.tp-stage{margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#000!important}
+.tp-stage-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.25) 0%,rgba(0,0,0,.1) 35%,#000 100%)!important}
+.tp-hero-row{padding:120px 60px 36px!important;gap:48px!important}
+.tp-poster-wrap{border:0!important;border-radius:10px!important;box-shadow:0 24px 60px rgba(0,0,0,.8)!important}
+.tp-facts,.tp-section,#tp-collection-sec{padding-left:60px!important;padding-right:60px!important}
+#tp-collection-rail,#tp-similar-rail,.cast-rail{padding-left:0!important;padding-right:0!important}
+.tp-section{margin-bottom:48px!important}
+.tp-section-title{font-size:24px!important}
+.ep-item{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;border-bottom:1px solid rgba(255,255,255,.06)!important}
+.tp-back-btn{top:78px!important;left:60px!important;border:0!important;background:rgba(0,0,0,.45)!important}
+@media(max-width:768px){
+.tp-hero-row{padding:96px 20px 24px!important;grid-template-columns:1fr!important}
+.tp-facts,.tp-section,#tp-collection-sec{padding-left:20px!important;padding-right:20px!important}
+.tp-back-btn{left:20px!important;top:68px!important}
+.tp-title{font-size:clamp(36px,11vw,56px)!important}
+.tp-stage{min-height:0!important}
+}
