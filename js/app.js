@@ -123,8 +123,8 @@ async function api(path,params={}){
     // anything flagged adult:true from any results list we get back,
     // regardless of whether the request-level filter already caught it.
     if(data&&Array.isArray(data.results)){
-      data.results=data.results.filter(item=>!item.adult);
     }
+    if(data&&Array.isArray(data.results)){data.results=data.results.filter(item=>!item.adult);}
     return data;
   }
   catch(_){return null;}

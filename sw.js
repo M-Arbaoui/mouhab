@@ -4,15 +4,19 @@
    Network-first: TMDB API
    Never cache: stream embeds
    ═══════════════════════════════════════════════ */
-const CACHE     = 'watchy-shell-v6';
-const API_CACHE = 'watchy-api-v6';
-const IMG_CACHE = 'watchy-img-v6';
+const CACHE     = 'watchy-shell-v17G';
+const API_CACHE = 'watchy-api-v17G';
+const IMG_CACHE = 'watchy-img-v17G';
 
 const SHELL = [
   './',
   './index.html',
-  './css/style.css',
-  './js/app.js',
+  './css/style.min.css',
+  './css/enhance.css',
+  './css/heroG.css',
+  './js/app.min.js',
+  './js/enhance.js',
+  './js/heroG.js',
   './manifest.json',
   './og-image.png',
   './icon-192.png',
